@@ -179,6 +179,28 @@ local T = {
 	antiRagSub = { "clears ragdoll / platform stand states", "bersihkan state ragdoll / platform stand" },
 	antiGuard = { "Anti guard", "Anti guard" },
 	antiGuardSub = { "dash to safety the moment you're chased", "langsung lari saat dikejar" },
+	antiBan = { "Anti ban", "Anti ban" },
+	antiBanSub = { "human pacing, jitter and action cooldown", "jeda acak, jitter, dan batas aksi" },
+	antiSteal = { "Anti steal", "Anti steal" },
+	antiStealSub = { "lock your carried pet from other players", "kunci pet bawaan dari player lain" },
+	antiHit = { "Anti hit player", "Anti hit player" },
+	antiHitSub = { "back off when someone gets too close", "mundur kalau ada yang terlalu dekat" },
+	invisible = { "Invisible", "Invisible" },
+	invisibleSub = { "hide every character, animal and carried pet", "sembunyikan semua karakter, hewan, dan pet bawaan" },
+
+	secBreak = { "Auto break · egg", "Auto break · telur" },
+	breakOn = { "Auto break", "Auto break" },
+	breakOnSub = { "slash the chosen map's eggs automatically", "pukul telur di map pilih otomatis" },
+	breakMap = { "Target map", "Map target" },
+	breakMapSub = { "only eggs in this map get hit", "cuma telur di map ini yang dipukul" },
+	breakOnce = { "Break once", "Pukul sekali" },
+	breakOnceSub = { "one egg, then stop", "satu telur, lalu berhenti" },
+	breakInfo = { "Break engine", "Mesin break" },
+
+	secSkill = { "Auto skill", "Auto skill" },
+	skillOn = { "Auto skill · R", "Auto skill · R" },
+	skillOnSub = { "press R the moment the skill is ready", "tekan R begitu skill siap" },
+	skillInfo = { "Skill engine", "Mesin skill" },
 
 	secFinder = { "Pet · egg · odds finder", "Finder pet · egg · odds" },
 	zone = { "Zone", "Zona" },
@@ -247,6 +269,23 @@ local S = {
 	antiAfk = true,
 	antiRag = true,
 	antiGuard = true,
+	antiBan = true,
+	antiSteal = true,
+	antiHit = true,
+	invisible = false,
+	breakOn = false,
+	breakMap = 1,
+	breakTarget = nil,
+	breakPhase = "idle",
+	breakCount = 0,
+	breakFails = 0,
+	breakLast = "-",
+	breakToken = 0,
+	autoSkill = true,
+	skillAt = 0,
+	skillUses = 0,
+	skillLast = "-",
+	stealCycles = 0,
 
 	stealOn = false,
 	stealAbort = false,
@@ -2095,7 +2134,8 @@ local function attemptSteal()
 	local everPlaced = false
 
 	for _, offset in ipairs(STEAL_OFFSETS) do
-		local goal = target.part.Position + offset
+		local jitter = S.antiBan and Vector3.new(math.random(-120, 120) / 100, 0, math.random(-120, 120) / 100) or Vector3.zero
+		local goal = target.part.Position + offset + jitter
 		local placed = false
 
 		-- the treadmill pose binding snaps the root back every render frame, so
@@ -2129,52 +2169,69 @@ local function attemptSteal()
 end
 
 -- step 1 drop in front of the zone, step 2 steal it again, step 3 walk in by steps
-local function carryHome()
-	local hrp, lip = root(), lipPoint()
-	if not (hrp and lip) then
-		return false, "no lip"
+-- smooth fast walk (tweened CFrame, no step teleports)
+local function glideTo(goal, speed, phase)
+	local hrp = root()
+	if not (hrp and goal) then
+		return false
 	end
-
-	S.stealPhase = "bawa ke depan safe zone"
 	releasePose()
 	hrp.AssemblyLinearVelocity = Vector3.zero
 	hrp.AssemblyAngularVelocity = Vector3.zero
-	hrp.CFrame = CFrame.new(lip)
-	task.wait(0.3)
+	local startCf = hrp.CFrame
+	local startPos = startCf.Position
+	local dist = (goal - startPos).Magnitude
+	local duration = math.clamp(dist / (speed or 190), 0.35, 9)
+	S.stealPhase = phase or "jalan cepat ke safe zone"
 
-	if not carrying() then
-		return true, "masuk di lip"
-	end
-
-	S.stealPhase = "drop di depan safe zone"
-	dropCarry()
-	if not carrying() then
-		S.stealPhase = "steal lagi"
-		attemptSteal()
-	end
-	if not carrying() then
-		return false, "drop · gagal steal ulang"
-	end
-
-	S.stealPhase = "masuk safe zone step by step"
-	local zone = safeZone()
-	local gap = 7
-	local steps = math.max(3, math.floor((zone and zone.Size.X / 2 or 24) / gap) + 1)
-	for i = 1, steps do
+	local conn
+	local t0 = os.clock()
+	conn = RunService.RenderStepped:Connect(function()
 		if not alive() or S.stealAbort then
-			return false, "aborted"
+			return
 		end
-		if not carrying() then
-			return true, string.format("masuk step %d", i)
-		end
-		local goal = Vector3.new(lip.X + i * gap, lip.Y, lip.Z)
+		local alpha = math.clamp((os.clock() - t0) / duration, 0, 1)
+		local eased = alpha * alpha * (3 - 2 * alpha)
+		local pos = startPos:Lerp(goal, eased)
+		pos += Vector3.new(0, math.sin(eased * math.pi) * math.min(6, dist * 0.03), 0)
+		hrp.CFrame = CFrame.new(pos) * (startCf - startPos)
 		hrp.AssemblyLinearVelocity = Vector3.zero
-		hrp.CFrame = CFrame.new(goal)
-		task.wait(0.3)
-	end
+		hrp.AssemblyAngularVelocity = Vector3.zero
+	end)
 
+	local limit = os.clock() + duration + 1.5
+	while alive() and not S.stealAbort and os.clock() < limit do
+		task.wait(0.05)
+	end
+	if conn then
+		conn:Disconnect()
+	end
+	return (hrp.Position - goal).Magnitude < 16
+end
+
+-- steal, then run the carry in one fast tween to the lip and one into the zone
+local function carryHome()
+	local zone = safeZone()
+	local lip = lipPoint()
+	if not zone then
+		return false, "no safe zone"
+	end
+	local inside = Vector3.new(
+		zone.Position.X - zone.Size.X / 2 + 20,
+		lip and lip.Y or zone.Position.Y - zone.Size.Y / 2 + 3,
+		zone.Position.Z
+	)
+
+	-- one continuous fast tween, no stopover at the lip
+	glideTo(inside, 240 + math.random(-20, 45), "jalan cepat ke safe zone")
+	if not alive() or S.stealAbort then
+		return false, "aborted"
+	end
+	if insideSafe() and not carrying() then
+		return true, "masuk · tween langsung ke dalam zone"
+	end
 	if not carrying() then
-		return true, "masuk di ujung"
+		return true, "banked · belum di dalam zone"
 	end
 	return false, "tetap carry"
 end
@@ -2236,8 +2293,16 @@ local function stealLoop()
 				stealCycle(true)
 			end
 
+			local delay = S.stealDelay
+			if S.antiBan then
+				S.stealCycles += 1
+				delay = delay * (0.75 + math.random(0, 60) / 100)
+				if S.stealCycles % 7 == 0 then
+					delay += 2 + math.random(0, 300) / 100
+				end
+			end
 			local waited = 0
-			while alive() and S.stealOn and S.stealToken == token and waited < S.stealDelay do
+			while alive() and S.stealOn and S.stealToken == token and waited < delay do
 				task.wait(0.1)
 				waited += 0.1
 			end
@@ -2274,6 +2339,8 @@ local function stealPanelText()
 		"target    " .. tostring(S.stealLast),
 		"sukses    " .. tostring(S.stealCount) .. "   gagal " .. tostring(S.stealFails),
 		"pickups   " .. tostring(#(pickupsFolder() and pickupsFolder():GetChildren() or {})),
+		"anti      ban " .. (S.antiBan and "on" or "off") .. " · steal " .. (S.antiSteal and "on" or "off") .. " · hit " .. (S.antiHit and "on" or "off"),
+		"invisible " .. (S.invisible and "on · semua karakter & pet disembunyikan" or "off"),
 	}
 	if S.stealTarget then
 		lines[#lines + 1] = string.format("next      %s · %s · $%s", tostring(S.stealTarget.name), tostring(S.stealTarget.rarity), fmt(S.stealTarget.cash))
@@ -2337,6 +2404,539 @@ local function ragTick()
 	if hrp then
 		hrp.AssemblyLinearVelocity = Vector3.new(hrp.AssemblyLinearVelocity.X, 0, hrp.AssemblyLinearVelocity.Z)
 	end
+end
+
+local function nearestOther(radius)
+	local hrp = root()
+	if not hrp then
+		return nil
+	end
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player ~= LocalPlayer and player.Character then
+			local other = player.Character:FindFirstChild("HumanoidRootPart")
+			if other and (other.Position - hrp.Position).Magnitude <= radius then
+				return player
+			end
+		end
+	end
+	return nil
+end
+
+local carryPromptCache, carryPromptAt, promptLockUntil = nil, 0, 0
+local function myCarryPrompt()
+	local uid = LocalPlayer:GetAttribute("SlashCarrying")
+	if not uid then
+		return nil
+	end
+	if carryPromptCache and carryPromptCache.Parent and os.clock() - carryPromptAt < 0.6 then
+		return carryPromptCache
+	end
+	local folder = pickupsFolder()
+	if folder then
+		for _, child in ipairs(folder:GetChildren()) do
+			if child.Name:find(tostring(uid), 1, true) then
+				local prompt = child:FindFirstChildWhichIsA("ProximityPrompt", true)
+				if prompt then
+					carryPromptCache, carryPromptAt = prompt, os.clock()
+					return prompt
+				end
+			end
+		end
+	end
+	return nil
+end
+
+-- keep other players off the pet we are carrying
+local function antiStealTick()
+	if not S.antiSteal then
+		return
+	end
+	local prompt = myCarryPrompt()
+	if not prompt then
+		return
+	end
+	if nearestOther(14) then
+		prompt.Enabled = false
+		promptLockUntil = os.clock() + 0.8
+		S.stealPhase = "pet dikunci · player dekat"
+	elseif os.clock() > promptLockUntil and not prompt.Enabled then
+		prompt.Enabled = true
+	end
+end
+
+-- bail out when someone closes in to hit us mid-carry
+local function antiHitTick()
+	if not S.antiHit or not carrying() then
+		return
+	end
+	if nearestOther(25) then
+		S.stealPhase = "musuh dekat · mundur"
+		dashToSafe()
+	end
+	local hum = humanoid()
+	if hum and hum.Health < hum.MaxHealth then
+		hum.Health = hum.MaxHealth
+	end
+end
+
+local hiddenInstances = {}
+local function hideModel(model)
+	if not model then
+		return
+	end
+	local parts = {}
+	if model:IsA("BasePart") then
+		table.insert(parts, model)
+	end
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("BasePart") or d:IsA("BillboardGui") or d:IsA("SurfaceGui") or d:IsA("Highlight") then
+			table.insert(parts, d)
+		end
+	end
+	for _, d in ipairs(parts) do
+		if d:IsA("BasePart") then
+			if d:GetAttribute("elenaOrigTrans") == nil then
+				d:SetAttribute("elenaOrigTrans", d.Transparency)
+				table.insert(hiddenInstances, d)
+			end
+			d.Transparency = 1
+			d.CastShadow = false
+		elseif d:IsA("BillboardGui") or d:IsA("SurfaceGui") or d:IsA("Highlight") then
+			if d:GetAttribute("elenaOrigEnabled") == nil then
+				d:SetAttribute("elenaOrigEnabled", d.Enabled)
+				table.insert(hiddenInstances, d)
+			end
+			d.Enabled = false
+		end
+	end
+end
+
+local function clearInvisible()
+	for _, d in ipairs(hiddenInstances) do
+		local transparency = d:GetAttribute("elenaOrigTrans")
+		if transparency ~= nil and d:IsA("BasePart") then
+			d.Transparency = transparency
+			d:SetAttribute("elenaOrigTrans", nil)
+		end
+		local enabled = d:GetAttribute("elenaOrigEnabled")
+		if enabled ~= nil then
+			d.Enabled = enabled
+			d:SetAttribute("elenaOrigEnabled", nil)
+		end
+	end
+	table.clear(hiddenInstances)
+end
+
+local function scanInvisible()
+	if not S.invisible then
+		return
+	end
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player.Character then
+			hideModel(player.Character)
+		end
+	end
+	local runtime = workspace:FindFirstChild("SlashRuntime")
+	local folders = {
+		runtime and runtime:FindFirstChild("Pickups"),
+		runtime and runtime:FindFirstChild("Eggs"),
+		workspace:FindFirstChild("Pets"),
+	}
+	for _, folder in ipairs(folders) do
+		if folder then
+			for _, child in ipairs(folder:GetChildren()) do
+				hideModel(child)
+			end
+		end
+	end
+	for _, model in ipairs(workspace:GetDescendants()) do
+		if model:IsA("Model") and model:FindFirstChildOfClass("Humanoid") then
+			hideModel(model)
+		end
+	end
+end
+
+function setInvisible(state)
+	S.invisible = state and true or false
+	if S.invisible then
+		scanInvisible()
+	else
+		clearInvisible()
+	end
+	if UI.invisToggle then
+		UI.invisToggle.SetSilent(S.invisible)
+	end
+	if UI.breakMapSelect then
+		UI.breakMapSelect.Set(nil, S.breakMap)
+	end
+	if UI.breakToggle then
+		UI.breakToggle.SetSilent(S.breakOn)
+	end
+	notify("invisible " .. (S.invisible and "on" or "off"))
+end
+
+do
+-- ============================================================================
+-- 14b · auto break engine
+-- ============================================================================
+local function breakEggFolder()
+	local runtime = workspace:FindFirstChild("SlashRuntime")
+	return runtime and runtime:FindFirstChild("Eggs") or nil
+end
+
+local function eggHealth(egg)
+	return tonumber(egg:GetAttribute("Health")) or 0
+end
+
+local function findBreakEgg()
+	local folder = breakEggFolder()
+	if not folder then
+		return nil
+	end
+	local hrp = root()
+	local best, bestDist
+	for _, egg in ipairs(folder:GetChildren()) do
+		if egg:IsA("Model") and eggHealth(egg) > 0 then
+			local zone = tonumber(egg:GetAttribute("Zone"))
+			if zone == S.breakMap then
+				local part = egg:FindFirstChild("EggQueryBounds") or egg:FindFirstChildWhichIsA("BasePart")
+				if part then
+					local dist = hrp and (part.Position - hrp.Position).Magnitude or 0
+					if not bestDist or dist < bestDist then
+						best, bestDist = egg, dist
+					end
+				end
+			end
+		end
+	end
+	return best
+end
+
+local function weaponStats()
+	local char = LocalPlayer.Character
+	local tool = char and char:FindFirstChildOfClass("Tool") or nil
+	local cfg = GameConfig.Swords or {}
+	local defId = tool and tool:GetAttribute("SlashDefinitionId") or nil
+	local damage = 0
+	local name = tool and tool.Name or "no weapon"
+	if defId then
+		for _, entry in pairs(cfg) do
+			if tostring(entry.DefinitionId) == tostring(defId) then
+				damage = tonumber(entry.Damage) or 0
+				name = tostring(entry.Name or name)
+				break
+			end
+		end
+	end
+	if damage == 0 then
+		for _, entry in pairs(cfg) do
+			if tostring(entry.Name) == name then
+				damage = tonumber(entry.Damage) or 0
+				break
+			end
+		end
+	end
+	local boost = tonumber(LocalPlayer:GetAttribute("SlashSwingBoostMultiplier")) or 1
+	if boost <= 0 then
+		boost = 1
+	end
+	local crit = tonumber(LocalPlayer:GetAttribute("SlashCritChance")) or 0
+	local critMul = tonumber(LocalPlayer:GetAttribute("SlashCritDamage")) or 1.5
+	local expected = damage * boost * (1 + math.max(0, crit) * (math.max(1, critMul) - 1))
+	local cooldown = tonumber(GameConfig.SwingCooldown) or 0.5
+	return {
+		name = name,
+		damage = damage,
+		boost = boost,
+		expected = expected,
+		cooldown = cooldown,
+	}
+end
+
+local function swordSuggestion(hp, swing)
+	local cfg = GameConfig.Swords or {}
+	local list = {}
+	for _, entry in pairs(cfg) do
+		table.insert(list, {
+			name = tostring(entry.Name or "?"),
+			damage = tonumber(entry.Damage) or 0,
+			rarity = tostring(entry.Rarity or "?"),
+		})
+	end
+	table.sort(list, function(a, b) return a.damage < b.damage end)
+
+	local swings = math.max(1, math.floor(60 / math.max(0.05, swing.cooldown)))
+	local needed = hp / swings
+	local pick, strongest
+	for _, entry in ipairs(list) do
+		if entry.damage >= needed and not pick then
+			pick = entry
+		end
+		if not strongest or entry.damage > strongest.damage then
+			strongest = entry
+		end
+	end
+	return { needed = needed, pick = pick, strongest = strongest }
+end
+
+local function teleportToEgg(egg)
+	local hrp = root()
+	local part = egg:FindFirstChild("EggQueryBounds") or egg:FindFirstChildWhichIsA("BasePart")
+	if not (hrp and part) then
+		return false
+	end
+	local range = tonumber(GameConfig.EggRange) or 8
+	if (part.Position - hrp.Position).Magnitude <= range - 1 then
+		return true
+	end
+	releasePose()
+	hrp.CFrame = CFrame.new(part.Position + Vector3.new(0, 3, range - 2))
+	hrp.AssemblyLinearVelocity = Vector3.zero
+	hrp.AssemblyAngularVelocity = Vector3.zero
+	task.wait(0.15)
+	return true
+end
+
+local function swingTheEgg(egg, token)
+	local swing = weaponStats()
+	local hp = eggHealth(egg)
+	if swing.damage <= 0 then
+		return false, "no weapon"
+	end
+	if hp <= 0 then
+		return false, "telur sudah pecah"
+	end
+	local clicks = math.ceil(hp / math.max(0.01, swing.expected))
+	local seconds = clicks * swing.cooldown
+	S.breakLast = string.format("%s · %s HP · %s/klik · %s klik · %ss",
+		tostring(egg:GetAttribute("EggDisplayName") or egg.Name),
+		fmt(hp), fmt(swing.expected), fmt(clicks), fmt(seconds))
+
+	local before = hp
+	local misses = 0
+	local i = 0
+	while alive() and S.breakToken == token and egg.Parent and eggHealth(egg) > 0 do
+		i += 1
+		if S.antiBan and i % 11 == 0 then
+			task.wait(0.3 + math.random(0, 40) / 100)
+		end
+		local ok = pcall(function()
+			mouse1press()
+			task.wait(0.06)
+			mouse1release()
+		end)
+		if not ok then
+			return false, "input mouse gagal"
+		end
+		task.wait(swing.cooldown + (S.antiBan and math.random(-6, 12) / 100 or 0))
+		if i % 3 == 0 then
+			local now = eggHealth(egg)
+			if now >= before then
+				misses += 1
+				if misses >= 2 then
+					return false, "focus game dulu · klik nggak ngefek"
+				end
+			else
+				misses = 0
+			end
+			before = now
+		end
+	end
+	return eggHealth(egg) <= 0 or not egg.Parent, "pecah"
+end
+
+local function breakCycle(silent)
+	S.breakToken += 1
+	local token = S.breakToken
+	if S.treadmillOn then
+		leaveTreadmill()
+	else
+		releasePose()
+	end
+	S.breakPhase = "cari telur · map " .. tostring(S.breakMap)
+	local egg = findBreakEgg()
+	if not egg then
+		S.breakFails += 1
+		S.breakLast = "no egg · map " .. tostring((GameConfig.ZoneNames or {})[S.breakMap] or S.breakMap)
+		S.breakPhase = "idle"
+		if not silent then notify(S.breakLast) end
+		return false, S.breakLast
+	end
+	S.breakTarget = egg
+	S.breakPhase = "teleport ke telur"
+	if not teleportToEgg(egg) then
+		S.breakFails += 1
+		S.breakLast = "teleport gagal"
+		S.breakPhase = "idle"
+		return false, S.breakLast
+	end
+	S.breakPhase = "auto slash"
+	local ok, reason = swingTheEgg(egg, token)
+	S.breakPhase = "idle"
+	if ok then
+		S.breakCount += 1
+		S.breakLast = "pecah · " .. tostring(egg:GetAttribute("EggDisplayName") or egg.Name)
+	else
+		S.breakFails += 1
+		S.breakLast = reason
+	end
+	if not silent then notify(S.breakLast) end
+	return ok, S.breakLast
+end
+
+local function breakLoop()
+	while S.breakOn do
+		local ok, reason = pcall(breakCycle, true)
+		if not ok then
+			S.breakFails += 1
+			S.breakLast = "error · " .. tostring(reason)
+		end
+		local waitTime = 0.5 + math.random(0, 60) / 100
+		if S.antiBan and S.breakCount % 6 == 0 then
+			waitTime += 1 + math.random(0, 200) / 100
+		end
+		local elapsed = 0
+		while elapsed < waitTime and S.breakOn do
+			task.wait(0.1)
+			elapsed += 0.1
+		end
+	end
+	S.breakPhase = "idle"
+end
+
+function setAutoBreak(state)
+	S.breakOn = state and true or false
+	S.breakToken += 1
+	if S.breakOn then
+		task.spawn(breakLoop)
+	else
+		S.breakPhase = "idle"
+	end
+	if UI.breakToggle then
+		UI.breakToggle.SetSilent(S.breakOn)
+	end
+	notify("auto break " .. (S.breakOn and "on" or "off"))
+end
+
+local function breakPanelText()
+	local egg = S.breakTarget and S.breakTarget.Parent and S.breakTarget or findBreakEgg()
+	local swing = weaponStats()
+	local lines = {
+		"status    " .. (S.breakOn and ("on · " .. tostring(S.breakPhase)) or "off"),
+		"map       " .. tostring((GameConfig.ZoneNames or {})[S.breakMap] or S.breakMap),
+		"weapon    " .. swing.name .. " · " .. fmt(swing.damage) .. "/klik",
+	}
+	if egg then
+		local hp = eggHealth(egg)
+		local clicks = math.ceil(hp / math.max(0.01, swing.expected))
+		local sug = swordSuggestion(hp, swing)
+		lines[#lines + 1] = "egg       " .. tostring(egg:GetAttribute("EggDisplayName") or egg.Name)
+		lines[#lines + 1] = string.format("hp        %s / %s", fmt(hp), fmt(tonumber(egg:GetAttribute("MaxHealth")) or hp))
+		lines[#lines + 1] = "butuh     " .. fmt(clicks) .. " klik · " .. fmt(clicks * swing.cooldown) .. " detik"
+		lines[#lines + 1] = "min dmg   " .. fmt(sug.needed) .. "/klik (60 detik)"
+		if sug.pick then
+			lines[#lines + 1] = "pakai     " .. sug.pick.name .. " · " .. fmt(sug.pick.damage) .. " (" .. sug.pick.rarity .. ")"
+		elseif sug.strongest then
+			lines[#lines + 1] = "max       " .. sug.strongest.name .. " · " .. fmt(sug.strongest.damage) .. " · kurang " .. fmt(sug.needed - sug.strongest.damage)
+		end
+	else
+		lines[#lines + 1] = "egg       - tidak ada di map ini"
+	end
+	lines[#lines + 1] = string.format("hasil     %d pecah · %d gagal", S.breakCount, S.breakFails)
+	lines[#lines + 1] = "terakhir  " .. tostring(S.breakLast)
+	return table.concat(lines, "\n")
+end
+
+
+S.Break = {
+	cycle = breakCycle,
+	panel = breakPanelText,
+	auto = setAutoBreak,
+	find = findBreakEgg,
+	stats = function()
+		local egg = findBreakEgg()
+		local swing = weaponStats()
+		return {
+			map = S.breakMap,
+			mapName = (GameConfig.ZoneNames or {})[S.breakMap],
+			egg = egg and tostring(egg:GetAttribute("EggDisplayName") or egg.Name) or nil,
+			hp = egg and eggHealth(egg) or 0,
+			weapon = swing.name,
+			damage = swing.damage,
+			expected = swing.expected,
+			cooldown = swing.cooldown,
+			suggestion = egg and swordSuggestion(eggHealth(egg), swing) or nil,
+		}
+	end,
+}
+end
+
+-- ============================================================================
+-- 14c · auto skill engine (R = skill)
+-- ============================================================================
+do
+	local function readyAt(name)
+		return tonumber(LocalPlayer:GetAttribute(name)) or 0
+	end
+
+	local function press(vk)
+		local ok = pcall(function()
+			keyclick(vk)
+		end)
+		return ok
+	end
+
+	local function skillTick()
+		if not S.autoSkill then
+			return
+		end
+		local now = os.time()
+		local at = readyAt("SlashSkillReadyAt")
+		if at <= 0 or now < at then
+			return
+		end
+		if now < (S.skillNext or 0) then
+			return
+		end
+		if press(82) then
+			S.skillAt = now
+			S.skillNext = now + math.max(1, tonumber(LocalPlayer:GetAttribute("SlashSkillCooldown")) or 14) + 0.25
+			S.skillUses += 1
+			S.skillLast = "skill · R"
+		end
+	end
+
+
+	local function tick()
+		pcall(skillTick)
+	end
+
+	local function panel()
+		local now = os.time()
+		local skillLeft = math.max(0, readyAt("SlashSkillReadyAt") - now)
+		return table.concat({
+			"skill     " .. (S.autoSkill and ("on · " .. (skillLeft <= 0 and "READY" or math.ceil(skillLeft) .. "s")) or "off"),
+			"terpakai  " .. tostring(S.skillUses),
+			"terakhir  " .. tostring(S.skillLast),
+		}, "\n")
+	end
+
+	S.Skill = {
+		tick = tick,
+		panel = panel,
+		pressSkill = function()
+			return press(82)
+		end,
+		stats = function()
+			return {
+				skillOn = S.autoSkill,
+				skillReady = readyAt("SlashSkillReadyAt") <= os.time(),
+				skillLeft = math.max(0, readyAt("SlashSkillReadyAt") - os.time()),
+				skillUses = S.skillUses,
+				skillNext = S.skillNext or 0,
+			}
+		end,
+	}
 end
 
 local function afkTick()
@@ -2549,6 +3149,59 @@ UI.guardToggle = createToggleCard(pageFarm, "antiGuard", "antiGuardSub", S.antiG
 	S.antiGuard = state
 	notify("anti guard " .. (state and "on" or "off"))
 end)
+
+UI.banToggle = createToggleCard(pageFarm, "antiBan", "antiBanSub", S.antiBan, function(state)
+	S.antiBan = state
+	notify("anti ban " .. (state and "on" or "off"))
+end)
+
+UI.stealGuardToggle = createToggleCard(pageFarm, "antiSteal", "antiStealSub", S.antiSteal, function(state)
+	S.antiSteal = state
+	notify("anti steal " .. (state and "on" or "off"))
+end)
+
+UI.hitToggle = createToggleCard(pageFarm, "antiHit", "antiHitSub", S.antiHit, function(state)
+	S.antiHit = state
+	notify("anti hit " .. (state and "on" or "off"))
+end)
+
+UI.invisToggle = createToggleCard(pageFarm, "invisible", "invisibleSub", S.invisible, function(state)
+	setInvisible(state)
+end)
+
+createSection(pageFarm, "secBreak")
+
+S.breakMaps = {}
+for index = 1, 12 do
+	table.insert(S.breakMaps, (GameConfig.ZoneNames or {})[index] or ("Zone " .. index))
+end
+
+UI.breakMapSelect = createDropdownCard(pageFarm, "breakMap", "breakMapSub", S.breakMaps, S.breakMap, function(_, index)
+	S.breakMap = index
+	S.breakTarget = nil
+	S.breakLast = "map · " .. tostring(S.breakMaps[index])
+end)
+
+UI.breakToggle = createToggleCard(pageFarm, "breakOn", "breakOnSub", S.breakOn, function(state)
+	S.Break.auto(state)
+end)
+
+createButtonCard(pageFarm, "breakOnce", "breakOnceSub", Theme.BgButtonOn, function()
+	task.spawn(function()
+		S.Break.cycle(false)
+	end)
+end)
+
+UI.breakPanel = createTextPanel(pageFarm, "breakInfo", 168)
+
+createSection(pageFarm, "secSkill")
+
+UI.skillToggle = createToggleCard(pageFarm, "skillOn", "skillOnSub", S.autoSkill, function(state)
+	S.autoSkill = state
+	notify("auto skill " .. (state and "on" or "off"))
+end)
+
+UI.skillPanel = createTextPanel(pageFarm, "skillInfo", 80)
 
 -- ============================================================================
 -- 15 · finder page
@@ -2915,6 +3568,13 @@ local function captureProfile()
 		AntiRag = S.antiRag,
 		AntiGuard = S.antiGuard,
 		StealDelay = S.stealDelay,
+		AntiBan = S.antiBan,
+		AntiSteal = S.antiSteal,
+		AntiHit = S.antiHit,
+		Invisible = S.invisible,
+		BreakMap = S.breakMap,
+		BreakOn = S.breakOn,
+		AutoSkill = S.autoSkill,
 	}
 end
 
@@ -2928,6 +3588,13 @@ local function applyProfile(profile)
 	S.antiAfk = profile.AntiAfk ~= false
 	S.antiRag = profile.AntiRag ~= false
 	S.antiGuard = profile.AntiGuard ~= false
+	S.antiBan = profile.AntiBan ~= false
+	S.antiSteal = profile.AntiSteal ~= false
+	S.antiHit = profile.AntiHit ~= false
+	S.invisible = profile.Invisible and true or false
+	S.breakMap = tonumber(profile.BreakMap) or 1
+	S.breakOn = profile.BreakOn and true or false
+	S.autoSkill = profile.AutoSkill ~= false
 	S.stealDelay = tonumber(profile.StealDelay) or 1.2
 
 	if UI.speedSlider then
@@ -2945,6 +3612,27 @@ local function applyProfile(profile)
 	if UI.guardToggle then
 		UI.guardToggle.SetSilent(S.antiGuard)
 	end
+	if UI.banToggle then
+		UI.banToggle.SetSilent(S.antiBan)
+	end
+	if UI.stealGuardToggle then
+		UI.stealGuardToggle.SetSilent(S.antiSteal)
+	end
+	if UI.hitToggle then
+		UI.hitToggle.SetSilent(S.antiHit)
+	end
+	if UI.invisToggle then
+		UI.invisToggle.SetSilent(S.invisible)
+	end
+	if UI.breakMapSelect then
+		UI.breakMapSelect.Set(S.breakMaps, S.breakMap)
+	end
+	if UI.breakToggle then
+		UI.breakToggle.SetSilent(S.breakOn)
+	end
+	if UI.skillToggle then
+		UI.skillToggle.SetSilent(S.autoSkill)
+	end
 	if UI.stealDelay then
 		UI.stealDelay.Set(S.stealDelay)
 	end
@@ -2956,6 +3644,10 @@ local function applyProfile(profile)
 		if hum then
 			hum.WalkSpeed = S.baseSpeed or 16
 		end
+	end
+
+	if S.invisible then
+		pcall(scanInvisible)
 	end
 
 	if profile.Treadmill then
@@ -3385,6 +4077,17 @@ table.insert(
 			S.ragAt = now
 			pcall(ragTick)
 		end
+
+		if now - (S.antiAt or 0) > 0.12 then
+			S.antiAt = now
+			pcall(antiStealTick)
+			pcall(antiHitTick)
+		end
+
+		if S.invisible and now - (S.invisAt or 0) > 3 then
+			S.invisAt = now
+			pcall(scanInvisible)
+		end
 	end)
 )
 
@@ -3472,6 +4175,19 @@ table.insert(
 			if UI.stealPanel then
 				UI.stealPanel.Set(stealPanelText())
 				UI.stealPanel.SetNote(S.stealOn and "loop" or "idle")
+			end
+
+			if UI.breakPanel then
+				UI.breakPanel.Set(S.Break.panel())
+				UI.breakPanel.SetNote(S.breakOn and "loop" or "idle")
+			end
+
+			pcall(function()
+				S.Skill.tick()
+			end)
+			if UI.skillPanel then
+				UI.skillPanel.Set(S.Skill.panel())
+				UI.skillPanel.SetNote(S.autoSkill and "live" or "idle")
 			end
 
 			if activeTab == "Main" then
@@ -3647,6 +4363,39 @@ HUB.setAutoSteal = function(state)
 	return S.stealOn
 end
 HUB.stopSteal = stopSteal
+HUB.setInvisible = setInvisible
+HUB.setAutoDash = nil
+HUB.setAutoSkill = function(state)
+	S.autoSkill = state and true or false
+	if UI.skillToggle then UI.skillToggle.SetSilent(S.autoSkill) end
+	return S.autoSkill
+end
+HUB.skillStats = S.Skill.stats
+HUB.setAutoBreak = S.Break.auto
+HUB.breakOnce = function()
+	return S.Break.cycle(false)
+end
+HUB.setBreakMap = function(index)
+	S.breakMap = math.clamp(math.floor(tonumber(index) or 1), 1, 12)
+	S.breakTarget = nil
+	if UI.breakMapSelect then
+		UI.breakMapSelect.Set(nil, S.breakMap)
+	end
+	return S.breakMap
+end
+HUB.breakStats = S.Break.stats
+HUB.setProtection = function(name, state)
+	local key = name == "ban" and "antiBan" or (name == "steal" and "antiSteal" or (name == "hit" and "antiHit" or nil))
+	if not key then
+		return nil
+	end
+	S[key] = state and true or false
+	local ui = key == "antiBan" and UI.banToggle or (key == "antiSteal" and UI.stealGuardToggle or UI.hitToggle)
+	if ui then
+		ui.SetSilent(S[key])
+	end
+	return S[key]
+end
 HUB.rarities = RARITY_TIER
 HUB.rarityOptions = RARITY_VALUES
 HUB.setScale = function(value)
@@ -3724,6 +4473,29 @@ HUB.debug = {
 	pickupCount = function()
 		local folder = pickupsFolder()
 		return folder and #folder:GetChildren() or -1
+	end,
+	glideTo = function(x, y, z)
+		return glideTo(Vector3.new(x, y, z), 190, "test tween")
+	end,
+	scanInvisible = function()
+		scanInvisible()
+		return #hiddenInstances
+	end,
+	breakEgg = function()
+		return S.Break.find()
+	end,
+	breakInfo = function()
+		return S.Break.panel()
+	end,
+	breakOnce = function()
+		return S.Break.cycle(true)
+	end,
+	antiTick = function()
+		local ok, err = pcall(function()
+			antiStealTick()
+			antiHitTick()
+		end)
+		return ok, err
 	end,
 }
 
