@@ -1686,6 +1686,15 @@ end
 -- gameplay requests go straight to the server, no focused window and no mouse needed
 -- time-based and far above the game client's own small counter; avoids Replay rejects
 local nextRequestId = os.time() * 1000 + math.random(1000, 999999)
+-- inventory has its own small sequential RequestId counter (the gameplay one is
+-- time-based to dodge Replay rejects, but SlashInventory ignores huge ids)
+local invRequestId = 100
+local function nextInvRequestId()
+	-- SlashInventory rejects any id it has already seen with Code=Replay, and a
+	-- plain counter can collide with the client's own counter across rejoins
+	invRequestId = math.random(200000000, 999000000)
+	return invRequestId
+end
 local function sendGameRequest(operation, args)
 	local folder = ReplicatedStorage:FindFirstChild("SlashGameplay")
 	local event = folder and folder:FindFirstChild("Request")
@@ -1701,6 +1710,38 @@ local function sendGameRequest(operation, args)
 		})
 	end)
 	return ok, err
+end
+
+-- counter-attack the player who is hitting us / stealing our pet while auto
+-- steal runs. the game's own Slash needs no target args -- the server resolves
+-- hits inside PvPRange, so we only need to face them and fire the swing.
+local counterAt, counterArmAt = 0, 0
+local function counterSlash(target)
+	if not target or os.clock() - counterAt < 0.45 then
+		return false
+	end
+	local char = LocalPlayer.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	local tpart = target.Character and target.Character:FindFirstChild("HumanoidRootPart")
+	if not hrp or not tpart then
+		return false
+	end
+	counterAt = os.clock()
+	-- make sure a real sword is in hand so the PvP swing actually deals damage;
+	-- fire-and-forget with a slow throttle so the equip wait never stalls ticks
+	if os.clock() - counterArmAt > 3 and S.Break and S.Break.arm then
+		counterArmAt = os.clock()
+		task.spawn(function()
+			pcall(S.Break.arm)
+		end)
+	end
+	local look = tpart.Position - hrp.Position
+	look = Vector3.new(look.X, 0, look.Z)
+	if look.Magnitude > 0.01 then
+		hrp.CFrame = CFrame.new(hrp.Position, hrp.Position + look)
+	end
+	sendGameRequest("Slash", {})
+	return true
 end
 
 -- assigned once the invisibility helpers exist
@@ -2132,8 +2173,17 @@ local function waitForCarry(seconds)
 		end
 		task.wait(0.06)
 	end
-	local final = LocalPlayer:GetAttribute("SlashCarrying")
-	return final ~= nil and final ~= false
+	-- server sometimes grants the carry a beat after the hold ends; give it one
+	-- more short grace window before declaring the prompt denied
+	local grace = os.clock() + 0.9
+	while os.clock() < grace do
+		local carrying = LocalPlayer:GetAttribute("SlashCarrying")
+		if carrying and carrying ~= false then
+			return true
+		end
+		task.wait(0.06)
+	end
+	return false
 end
 
 local STEAL_OFFSETS = {
@@ -2226,13 +2276,18 @@ local function attemptSteal()
 		if placed then
 			S.stealPhase = "hold steal"
 			firePrompt(target.prompt)
-			if waitForCarry(1.6) then
+			if waitForCarry(2.4) then
 				-- let the server finish the carry handoff before moving; yanking the
 				-- root away on the same frame is what made the animal blink out
 				S.stealPhase = "stabilkan carry"
 				task.wait(0.45 + math.random(0, 25) / 100)
 				revealCarriedPet()
 				if carrying() then
+					return true, "carrying"
+				end
+				-- the carry may still be settling on the server; don't cry failure
+				-- while the pet is visibly in hand
+				if waitForCarry(0.8) then
 					return true, "carrying"
 				end
 				return false, "carry hilang · terlalu cepat"
@@ -2264,8 +2319,16 @@ local function glideTo(goal, speed, phase)
 
 	local conn
 	local t0 = os.clock()
+	S.glideLost = false
 	conn = RunService.RenderStepped:Connect(function()
 		if not alive() or S.stealAbort or S.emergencyBank then
+			return
+		end
+		-- if the pet slips out mid-glide AND we're not yet in the zone, stop
+		-- right here. inside the zone the pet is meant to drop (banked), so
+		-- losing carry there is success, not a failure.
+		if not carrying() and not S.emergencyBank and not insideSafe() then
+			S.glideLost = true
 			return
 		end
 		if S.antiGuard and carrying() then
@@ -2286,7 +2349,7 @@ local function glideTo(goal, speed, phase)
 	end)
 
 	local limit = os.clock() + duration + 1.5
-	while alive() and not S.stealAbort and not S.emergencyBank and os.clock() < limit do
+	while alive() and not S.stealAbort and not S.emergencyBank and not S.glideLost and os.clock() < limit do
 		task.wait(0.05)
 	end
 	if conn then
@@ -2309,6 +2372,11 @@ local function carryHome()
 		zone.Position.Z
 	)
 
+	-- don't run all the way to the zone if the grab never happened -- that just
+	-- leaves us stranded in the safe zone with no pet and a fake "success"
+	if not carrying() then
+		return false, "carry gagal · nggak jalan ke zone"
+	end
 	-- one continuous tween, no stopover at the lip; slower start keeps the pet attached
 	glideTo(inside, 185 + math.random(-15, 35), "jalan cepat ke safe zone")
 	if not alive() or S.stealAbort then
@@ -2320,8 +2388,13 @@ local function carryHome()
 	if insideSafe() and not carrying() then
 		return true, "masuk · tween langsung ke dalam zone"
 	end
+	if S.glideLost then
+		return false, "pet lepas di jalan · gagal bank"
+	end
 	if not carrying() then
-		return true, "banked · belum di dalam zone"
+		-- pet dropped somewhere before reaching the zone = the grab actually
+		-- failed; never count this as a bank, and never keep gliding for it
+		return false, "pet lepas · gagal masuk zone"
 	end
 	return false, "tetap carry"
 end
@@ -2337,6 +2410,26 @@ local function stealCycle(silent)
 
 	S.stealPhase = "cari target"
 	local ok, reason = attemptSteal()
+
+	-- knocked loose by a player or a guard? don't retreat to the safe zone and
+	-- don't teleport home -- hit back (when it was a player) and grab it again
+	-- right here. only call it a failure after the retries run out.
+	local tries = 0
+	while not ok and tries < 2 and alive() and not S.stealAbort do
+		tries += 1
+		local p = S.NearestPlayer and S.NearestPlayer(22) or nil
+		if S.stealOn and p then
+			S.stealPhase = "dipukul player · counter + ambil lagi"
+			counterSlash(p)
+		else
+			S.stealPhase = "ambil lagi · " .. tostring(reason)
+		end
+		task.wait(0.35)
+		if not alive() or S.stealAbort then
+			break
+		end
+		ok, reason = attemptSteal()
+	end
 
 	if not ok then
 		S.stealFails += 1
@@ -2359,8 +2452,11 @@ local function stealCycle(silent)
 		end
 	else
 		S.stealFails += 1
-		S.stealPhase = "carry tidak selesai"
-		S.stealLast = tostring(detail or "gagal masuk")
+		S.stealPhase = tostring(detail or "carry tidak selesai")
+		S.stealLast = string.format("gagal · %s", tostring(detail or "gagal masuk"))
+		if not silent then
+			notify("bank gagal · " .. tostring(detail or "carry tidak selesai"), "bad")
+		end
 	end
 	return banked
 end
@@ -2459,7 +2555,9 @@ local function guardTick()
 
 	if LocalPlayer:GetAttribute("SlashCarrying") then
 		dashToSafe()
-	elseif not insideSafe() then
+	elseif not insideSafe() and not S.stealOn then
+		-- with auto steal on a failed grab must retry in place -- running back
+		-- to the plot here is what made it look like a random teleport home
 		local plot = myPlot()
 		local spawn = plot and plot:FindFirstChild("SpawnPoint")
 		local hrp = root()
@@ -2598,21 +2696,23 @@ local function antiHitTick()
 	end
 	-- while carrying, stealing must stay normal: antiGuard owns the emergency
 	-- bank, antiSteal locks the prompt. antiHit only refreshes health here.
-	-- when NOT carrying (e.g. walking in zone 1), dodge straight back to plot spawn.
 	if carrying() then
 		S.stealPhase = "anti hit · player " .. math.floor(dist) .. "m · kebal"
 		return
 	end
-	local plot = myPlot()
-	local spawn = plot and plot:FindFirstChild("SpawnPoint")
-	if spawn then
-		releasePose()
-		hrp.AssemblyLinearVelocity = Vector3.zero
-		hrp.CFrame = spawn.CFrame + Vector3.new(0, 4, 0)
+	-- never yank the character back to the plot -- that made a failed grab
+	-- "teleport home" instead of retrying. with auto steal on, hit the attacker
+	-- back and let stealCycle re-grab the pet right where we are.
+	if S.stealOn then
+		S.stealPhase = "anti hit · counter player " .. math.floor(dist) .. "m"
+		counterSlash(victim)
+	else
+		S.stealPhase = "anti hit · kebal · player " .. math.floor(dist) .. "m"
 	end
 end
 S.AntiStealTick = antiStealTick
 S.AntiHitTick = antiHitTick
+S.NearestPlayer = nearestPlayer
 end
 
 local hiddenInstances = {}
@@ -2862,9 +2962,9 @@ local function equipGameSlot(source)
 	local ok, result = pcall(getter.InvokeServer, getter)
 	local snapshot = ok and result and result.Snapshot or nil
 	local revision = snapshot and tonumber(snapshot.Revision) or 0
-	nextRequestId += 1
+	local reqId = nextInvRequestId()
 	pcall(request.FireServer, request, {
-		RequestId = nextRequestId,
+		RequestId = reqId,
 		ExpectedRevision = revision,
 		Operation = "Equip",
 		Args = { UID = uid },
@@ -2940,10 +3040,13 @@ local function ensureWeapon()
 		-- the real swords live in the server inventory snapshot
 		local uid, damage, name = strongestSwordUid()
 		if uid and damage > 0 then
-			if equipGameSlot(uid) then
-				return true, "equip · " .. tostring(name or uid)
-			end
-			return false, "equip gagal · " .. tostring(name or uid)
+			-- the server can swing this sword through the Auto operation even when
+			-- the client Tool never materialises (common after a session rejoin),
+			-- so treat a valid server-side sword as armed and equip in background
+			task.spawn(function()
+				pcall(equipGameSlot, uid)
+			end)
+			return true, "siap server · " .. tostring(name or uid)
 		end
 		return false, "no weapon"
 	end
@@ -3004,10 +3107,16 @@ local function swingTheEgg(egg, token)
 	local swing = weaponStats()
 	local hp = eggHealth(egg)
 	if swing.damage <= 0 then
-		return false, "no weapon"
+		-- with auto break on the server sword still swings via Auto even if the
+		-- client Tool is missing, so only hard-fail a manual one-shot here
+		if not S.breakOn then
+			return false, "no weapon"
+		end
 	end
 	if hp <= 0 then
-		return false, "telur sudah pecah"
+		-- the auto slash left running from the previous egg already finished
+		-- this one, so count it as a break instead of a failure
+		return S.breakOn, S.breakOn and "pecah · auto slash lanjutan" or "telur sudah pecah"
 	end
 	local clicks = math.ceil(hp / math.max(0.01, swing.expected))
 	local seconds = clicks * swing.cooldown
@@ -3051,7 +3160,11 @@ local function swingTheEgg(egg, token)
 			end
 		end
 	end
-	pcall(sendGameRequest, "Auto", { Enabled = false })
+	-- keep the server-side auto slash alive between eggs while auto break is on;
+	-- switching it off here is what made the toggle look like it kept turning off
+	if not S.breakOn then
+		pcall(sendGameRequest, "Auto", { Enabled = false })
+	end
 	return eggHealth(egg) <= 0 or not egg.Parent, "pecah · auto slash"
 end
 
@@ -3081,6 +3194,14 @@ local function breakCycle(silent)
 		return false, S.breakLast
 	end
 	S.breakPhase = "teleport ke telur"
+	-- the still-running Auto slash can delete the egg between findBreakEgg and
+	-- the teleport; that is a break, not a failed trip
+	if not egg.Parent or eggHealth(egg) <= 0 then
+		S.breakCount += 1
+		S.breakLast = "pecah · auto slash lanjutan"
+		if not silent then notify(S.breakLast) end
+		return true, S.breakLast
+	end
 	if not teleportToEgg(egg) then
 		S.breakFails += 1
 		S.breakLast = "teleport gagal"
@@ -3108,9 +3229,11 @@ local function breakLoop()
 			S.breakFails += 1
 			S.breakLast = "error · " .. tostring(reason)
 		end
-		local waitTime = 0.5 + math.random(0, 60) / 100
+		-- auto slash stays armed on the server, so keep this gap short -- a long
+		-- pause here looks exactly like the toggle switching itself off
+		local waitTime = 0.15 + math.random(0, 20) / 100
 		if S.antiBan and S.breakCount % 6 == 0 then
-			waitTime += 1 + math.random(0, 200) / 100
+			waitTime += 0.4 + math.random(0, 120) / 100
 		end
 		local elapsed = 0
 		while elapsed < waitTime and S.breakOn do
@@ -3172,6 +3295,7 @@ S.Break = {
 	panel = breakPanelText,
 	auto = setAutoBreak,
 	find = findBreakEgg,
+	arm = ensureWeapon,
 	stats = function()
 		local egg = findBreakEgg()
 		local swing = weaponStats()
@@ -4815,6 +4939,12 @@ HUB.debug = {
 			S.AntiHitTick()
 		end)
 		return ok, err
+	end,
+	counter = function(player)
+		return counterSlash(player)
+	end,
+	nearestPlayer = function(radius)
+		return S.NearestPlayer(radius or 18)
 	end,
 }
 
