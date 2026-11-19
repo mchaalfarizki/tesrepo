@@ -60,12 +60,10 @@ local function alive()
 end
 
 -- ============================================================================
--- 1 · theme tokens (compact size + clear glassmorphism contrast)
+-- 1 · theme tokens
 -- ============================================================================
-local WIN_W, WIN_H = 540, 400
-local SIDEBAR_W = 112
-local TOPBAR_H = 38
-local TELEMETRY_H = 32
+local TOPBAR_H = 44
+local TELEMETRY_H = 38
 local RELOAD_H = 3
 local BODY_TOP = TOPBAR_H + TELEMETRY_H
 local MAX_HISTORY = 12
@@ -74,41 +72,41 @@ local CONFIG_DIR = "ElenaHub"
 local CONFIG_FILE = CONFIG_DIR .. "/configs.json"
 
 local Theme = {
-	WindowSize = UDim2.fromOffset(WIN_W, WIN_H),
-	WindowPos = UDim2.new(0.5, -math.floor(WIN_W / 2), 0.5, -math.floor(WIN_H / 2)),
+	WindowSize = UDim2.fromOffset(560, 392),
+	WindowPos = UDim2.new(0.5, -280, 0.5, -196),
 
-	BgMain = Color3.fromRGB(15, 18, 26),
-	BgMainAlpha = 0.24,
-	BgHeader = Color3.fromRGB(22, 26, 38),
-	BgHeaderAlpha = 0.25,
-	BgCard = Color3.fromRGB(28, 33, 48),
-	BgCardAlpha = 0.28,
-	BgCardActive = Color3.fromRGB(38, 46, 74),
-	BgPill = Color3.fromRGB(20, 24, 35),
-	BgInput = Color3.fromRGB(16, 19, 29),
-	BgButtonOff = Color3.fromRGB(40, 46, 64),
-	BgButtonOn = Color3.fromRGB(79, 70, 229),
+	BgMain = Color3.fromRGB(16, 18, 24),
+	BgMainAlpha = 0.14,
+	BgHeader = Color3.fromRGB(22, 25, 34),
+	BgHeaderAlpha = 0.22,
+	BgCard = Color3.fromRGB(26, 30, 41),
+	BgCardAlpha = 0.25,
+	BgCardActive = Color3.fromRGB(30, 41, 64),
+	BgPill = Color3.fromRGB(18, 21, 30),
+	BgInput = Color3.fromRGB(14, 17, 25),
+	BgButtonOff = Color3.fromRGB(34, 39, 52),
+	BgButtonOn = Color3.fromRGB(59, 130, 246),
 	BgSuccess = Color3.fromRGB(22, 101, 52),
 
-	TextPrimary = Color3.fromRGB(248, 250, 252),
-	TextSecondary = Color3.fromRGB(165, 180, 204),
+	TextPrimary = Color3.fromRGB(241, 245, 249),
+	TextSecondary = Color3.fromRGB(148, 163, 184),
 	Stroke = Color3.fromRGB(255, 255, 255),
-	StrokeAlpha = 0.72,
+	StrokeAlpha = 0.86,
 
-	Accent = Color3.fromRGB(129, 140, 248),
-	Accent2 = Color3.fromRGB(244, 114, 182),
+	Accent = Color3.fromRGB(96, 165, 250),
+	Accent2 = Color3.fromRGB(147, 197, 253),
 	Good = Color3.fromRGB(74, 222, 128),
 	Warn = Color3.fromRGB(250, 204, 21),
 	Bad = Color3.fromRGB(248, 113, 113),
 
-	Corner = UDim.new(0, 10),
-	Small = UDim.new(0, 7),
+	Corner = UDim.new(0, 12),
+	Small = UDim.new(0, 8),
 	Pill = UDim.new(0, 6),
 
-	Fast = TweenInfo.new(0.16, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
-	TabAnim = TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
-	Pop = TweenInfo.new(0.24, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-	Reload = TweenInfo.new(0.4, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+	Fast = TweenInfo.new(0.18, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+	TabAnim = TweenInfo.new(0.24, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
+	Pop = TweenInfo.new(0.28, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+	Reload = TweenInfo.new(0.45, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
 }
 
 -- ============================================================================
@@ -134,9 +132,9 @@ local T = {
 	speedVal = { "Walk speed", "Kecepatan jalan" },
 	speedValSub = { "16 = normal · 500 = very fast", "16 = normal · 500 = sangat cepat" },
 	keybind = { "Speed key", "Tombol speed" },
-	keybindSub = { "press V to toggle fast walk", "tekan V untuk toggle jalan cepat" },
-	resetSpeed = { "Reset to game speed", "Balik ke speed game" },
-	resetSpeedSub = { "drops walk speed back to 16", "walk speed kembali ke 16" },
+	keybindSub = { "press to toggle fast walk", "tekan untuk toggle jalan cepat" },
+	resetSpeed = { "Reset to game speed", "Balik ke speed normal" },
+	resetSpeedSub = { "drops walk speed back to 16", "walk speed balik ke 16" },
 	minimize = { "Minimize to mini bar", "Kecilkan ke mini bar" },
 	minimizeSub = { "floating bar stays draggable on screen", "mini bar tetap bisa digeser" },
 
@@ -190,7 +188,7 @@ local T = {
 	btnCreate = { "Create", "Buat" },
 	btnSave = { "Save", "Simpan" },
 	btnLoad = { "Load", "Muat" },
-	historyTitle = { "History · max 12 · persisted", "Riwayat · maks 12 · tersimpan" },
+	historyTitle = { "History · max 12", "Riwayat · maks 12" },
 	historyEmpty = { "no history yet", "belum ada riwayat" },
 
 	secUi = { "Interface", "Antarmuka" },
@@ -442,8 +440,8 @@ MainScale.Parent = MainFrame
 
 local MainGradient = Instance.new("UIGradient")
 MainGradient.Color = ColorSequence.new({
-	ColorSequenceKeypoint.new(0, Color3.fromRGB(45, 52, 74)),
-	ColorSequenceKeypoint.new(1, Color3.fromRGB(16, 19, 28)),
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(30, 35, 48)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(12, 14, 20)),
 })
 MainGradient.Rotation = 135
 MainGradient.Parent = MainFrame
@@ -471,47 +469,46 @@ TopBar.BorderSizePixel = 0
 TopBar.Parent = MainFrame
 
 local TitleLabel = Instance.new("TextLabel")
-TitleLabel.Size = UDim2.new(1, -175, 1, 0)
-TitleLabel.Position = UDim2.fromOffset(12, 0)
+TitleLabel.Size = UDim2.new(1, -210, 1, 0)
+TitleLabel.Position = UDim2.fromOffset(16, 0)
 TitleLabel.BackgroundTransparency = 1
 TitleLabel.Text = "ELENA // SWORDS vs EGGS"
 TitleLabel.TextColor3 = Theme.TextPrimary
 TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
 TitleLabel.Font = Enum.Font.GothamBold
-TitleLabel.TextSize = 12
-TitleLabel.TextTruncate = Enum.TextTruncate.AtEnd
+TitleLabel.TextSize = 14
 TitleLabel.Parent = TopBar
 
 local SubLabel = Instance.new("TextLabel")
-SubLabel.Size = UDim2.new(0, 86, 1, 0)
-SubLabel.Position = UDim2.new(1, -152, 0, 0)
+SubLabel.Size = UDim2.new(0, 110, 1, 0)
+SubLabel.Position = UDim2.new(1, -186, 0, 0)
 SubLabel.BackgroundTransparency = 1
 SubLabel.Text = L("subTag")
 SubLabel.TextColor3 = Theme.TextSecondary
 SubLabel.TextXAlignment = Enum.TextXAlignment.Right
 SubLabel.Font = Enum.Font.GothamMedium
-SubLabel.TextSize = 10
+SubLabel.TextSize = 11
 SubLabel.Parent = TopBar
 
 local function windowButton(text, xOffset, bg)
 	local btn = Instance.new("TextButton")
-	btn.Size = UDim2.fromOffset(24, 24)
-	btn.Position = UDim2.new(1, xOffset, 0.5, -12)
+	btn.Size = UDim2.fromOffset(28, 28)
+	btn.Position = UDim2.new(1, xOffset, 0.5, -14)
 	btn.BackgroundColor3 = bg
-	btn.BackgroundTransparency = 0.2
+	btn.BackgroundTransparency = 0.25
 	btn.Text = text
 	btn.TextColor3 = Theme.TextPrimary
 	btn.Font = Enum.Font.GothamBold
-	btn.TextSize = text == "×" and 14 or 13
+	btn.TextSize = text == "×" and 16 or 15
 	btn.AutoButtonColor = false
 	btn.Parent = TopBar
 	addCorner(btn, Theme.Small)
-	addStroke(btn, 0.75, 1)
+	addStroke(btn, 0.85, 1)
 	return btn
 end
 
-local MinimizeBtn = windowButton("-", -58, Theme.BgButtonOff)
-local CloseBtn = windowButton("×", -30, Color3.fromRGB(185, 28, 28))
+local MinimizeBtn = windowButton("-", -68, Theme.BgButtonOff)
+local CloseBtn = windowButton("×", -34, Color3.fromRGB(185, 28, 28))
 
 -- ── telemetry
 local TelemetryBar = Instance.new("Frame")
@@ -519,67 +516,67 @@ TelemetryBar.Name = "TelemetryBar"
 TelemetryBar.Size = UDim2.new(1, 0, 0, TELEMETRY_H)
 TelemetryBar.Position = UDim2.fromOffset(0, TOPBAR_H)
 TelemetryBar.BackgroundColor3 = Theme.BgCard
-TelemetryBar.BackgroundTransparency = 0.32
+TelemetryBar.BackgroundTransparency = 0.35
 TelemetryBar.BorderSizePixel = 0
 TelemetryBar.Parent = MainFrame
 
 local Metrics = Instance.new("Frame")
-Metrics.Size = UDim2.new(0.74, -8, 1, -8)
-Metrics.Position = UDim2.fromOffset(8, 4)
+Metrics.Size = UDim2.new(0.72, -10, 1, -10)
+Metrics.Position = UDim2.fromOffset(10, 5)
 Metrics.BackgroundTransparency = 1
 Metrics.Parent = TelemetryBar
 
 local MetricsList = Instance.new("UIListLayout")
 MetricsList.FillDirection = Enum.FillDirection.Horizontal
 MetricsList.VerticalAlignment = Enum.VerticalAlignment.Center
-MetricsList.Padding = UDim.new(0, 5)
+MetricsList.Padding = UDim.new(0, 6)
 MetricsList.SortOrder = Enum.SortOrder.LayoutOrder
 MetricsList.Parent = Metrics
 
 local function metricPill(tag, order, width)
 	local pill = Instance.new("Frame")
 	pill.LayoutOrder = order
-	pill.Size = UDim2.fromOffset(width, 22)
+	pill.Size = UDim2.fromOffset(width, 24)
 	pill.BackgroundColor3 = Theme.BgPill
 	pill.BackgroundTransparency = 0.25
 	pill.BorderSizePixel = 0
 	pill.Parent = Metrics
 	addCorner(pill, Theme.Pill)
-	addStroke(pill, 0.78, 1)
+	addStroke(pill, 0.88, 1)
 
 	local label = Instance.new("TextLabel")
 	label.Size = UDim2.fromScale(1, 1)
 	label.BackgroundTransparency = 1
 	label.Text = tag .. " --"
 	label.TextColor3 = Theme.TextPrimary
-	label.Font = Enum.Font.GothamSemiBold
-	label.TextSize = 10
+	label.Font = Enum.Font.GothamSemibold
+	label.TextSize = 11
 	label.Parent = pill
 	return label
 end
 
-local FpsLabel = metricPill("FPS", 1, 58)
-local CpuLabel = metricPill("CPU", 2, 70)
-local GpuLabel = metricPill("GPU", 3, 70)
+local FpsLabel = metricPill("FPS", 1, 66)
+local CpuLabel = metricPill("CPU", 2, 78)
+local GpuLabel = metricPill("GPU", 3, 78)
 
 local StatusValue = Instance.new("TextLabel")
-StatusValue.Size = UDim2.new(0.26, -12, 1, 0)
-StatusValue.Position = UDim2.new(0.74, 0, 0, 0)
+StatusValue.Size = UDim2.new(0.28, -14, 1, 0)
+StatusValue.Position = UDim2.new(0.72, 0, 0, 0)
 StatusValue.BackgroundTransparency = 1
 StatusValue.Text = L("idle")
 StatusValue.TextColor3 = Theme.TextPrimary
 StatusValue.TextXAlignment = Enum.TextXAlignment.Right
 StatusValue.Font = Enum.Font.GothamBold
-StatusValue.TextSize = 10
+StatusValue.TextSize = 11
 StatusValue.Parent = TelemetryBar
 
 -- ── floating mini bar (shown when minimized)
 local Mini = Instance.new("Frame")
 Mini.Name = "FloatingMini"
-Mini.Size = UDim2.fromOffset(272, 46)
-Mini.Position = UDim2.new(0.5, -136, 0.05, 0)
+Mini.Size = UDim2.fromOffset(278, 52)
+Mini.Position = UDim2.new(0.5, -139, 0.06, 0)
 Mini.BackgroundColor3 = Theme.BgMain
-Mini.BackgroundTransparency = 0.2
+Mini.BackgroundTransparency = 0.12
 Mini.BorderSizePixel = 0
 Mini.Visible = false
 Mini.ZIndex = 10
@@ -594,12 +591,12 @@ MiniGradient.Rotation = 135
 MiniGradient.Parent = Mini
 
 local MiniScale = Instance.new("UIScale")
-MiniScale.Scale = 1
+MiniScale.Scale = 0.9
 MiniScale.Parent = Mini
 
 local MiniMetrics = Instance.new("Frame")
-MiniMetrics.Size = UDim2.new(1, -56, 0, 20)
-MiniMetrics.Position = UDim2.fromOffset(6, 5)
+MiniMetrics.Size = UDim2.new(1, -66, 0, 22)
+MiniMetrics.Position = UDim2.fromOffset(8, 6)
 MiniMetrics.BackgroundTransparency = 1
 MiniMetrics.Parent = Mini
 
@@ -612,66 +609,66 @@ MiniList.Parent = MiniMetrics
 local function miniPill(tag, order, width)
 	local pill = Instance.new("Frame")
 	pill.LayoutOrder = order
-	pill.Size = UDim2.fromOffset(width, 18)
+	pill.Size = UDim2.fromOffset(width, 20)
 	pill.BackgroundColor3 = Theme.BgPill
 	pill.BackgroundTransparency = 0.25
 	pill.BorderSizePixel = 0
 	pill.Parent = MiniMetrics
 	addCorner(pill, Theme.Pill)
-	addStroke(pill, 0.78, 1)
+	addStroke(pill, 0.88, 1)
 
 	local label = Instance.new("TextLabel")
 	label.Size = UDim2.fromScale(1, 1)
 	label.BackgroundTransparency = 1
 	label.Text = tag .. " --"
 	label.TextColor3 = Theme.TextPrimary
-	label.Font = Enum.Font.GothamSemiBold
-	label.TextSize = 9
+	label.Font = Enum.Font.GothamSemibold
+	label.TextSize = 10
 	label.Parent = pill
 	return label
 end
 
-local MiniFps = miniPill("FPS", 1, 52)
-local MiniCpu = miniPill("CPU", 2, 62)
-local MiniGpu = miniPill("GPU", 3, 62)
+local MiniFps = miniPill("FPS", 1, 56)
+local MiniCpu = miniPill("CPU", 2, 68)
+local MiniGpu = miniPill("GPU", 3, 68)
 
 local MiniStatus = Instance.new("TextLabel")
-MiniStatus.Size = UDim2.new(1, -56, 0, 14)
-MiniStatus.Position = UDim2.fromOffset(8, 27)
+MiniStatus.Size = UDim2.new(1, -66, 0, 16)
+MiniStatus.Position = UDim2.fromOffset(10, 30)
 MiniStatus.BackgroundTransparency = 1
 MiniStatus.Text = L("idle")
 MiniStatus.TextColor3 = Theme.TextPrimary
 MiniStatus.TextXAlignment = Enum.TextXAlignment.Left
 MiniStatus.Font = Enum.Font.GothamBold
-MiniStatus.TextSize = 9
+MiniStatus.TextSize = 10
 MiniStatus.Parent = Mini
 
 local ExpandBtn = Instance.new("TextButton")
-ExpandBtn.Size = UDim2.fromOffset(22, 22)
-ExpandBtn.Position = UDim2.new(1, -28, 0.5, -11)
+ExpandBtn.Size = UDim2.fromOffset(26, 26)
+ExpandBtn.Position = UDim2.new(1, -34, 0.5, -13)
 ExpandBtn.BackgroundColor3 = Theme.BgButtonOn
-ExpandBtn.BackgroundTransparency = 0.15
+ExpandBtn.BackgroundTransparency = 0.2
 ExpandBtn.Text = "+"
 ExpandBtn.TextColor3 = Theme.TextPrimary
 ExpandBtn.Font = Enum.Font.GothamBold
-ExpandBtn.TextSize = 13
+ExpandBtn.TextSize = 15
 ExpandBtn.AutoButtonColor = false
 ExpandBtn.Parent = Mini
 addCorner(ExpandBtn, Theme.Pill)
-addStroke(ExpandBtn, 0.75, 1)
+addStroke(ExpandBtn, 0.85, 1)
 
--- ── toasts
+-- ── toasts (replaces the old WindUI notification layer)
 local ToastHolder = Instance.new("Frame")
 ToastHolder.Name = "Toasts"
-ToastHolder.Size = UDim2.fromOffset(230, 180)
-ToastHolder.Position = UDim2.new(1, -242, 1, -192)
+ToastHolder.Size = UDim2.fromOffset(268, 260)
+ToastHolder.Position = UDim2.new(1, -282, 1, -272)
 ToastHolder.BackgroundTransparency = 1
 ToastHolder.ZIndex = 50
 ToastHolder.Parent = ScreenGui
 
 local ToastList = Instance.new("UIListLayout")
 ToastList.VerticalAlignment = Enum.VerticalAlignment.Bottom
-ToastList.Padding = UDim.new(0, 5)
+ToastList.Padding = UDim.new(0, 6)
 ToastList.SortOrder = Enum.SortOrder.LayoutOrder
 ToastList.Parent = ToastHolder
 
@@ -682,25 +679,25 @@ local function notify(text, kind)
 	end
 	toastOrder += 1
 	local tick = Instance.new("Frame")
-	tick.Size = UDim2.new(1, 0, 0, 34)
+	tick.Size = UDim2.new(1, 0, 0, 40)
 	tick.BackgroundColor3 = Theme.BgCard
-	tick.BackgroundTransparency = 0.14
+	tick.BackgroundTransparency = 0.08
 	tick.BorderSizePixel = 0
 	tick.LayoutOrder = toastOrder
 	tick.Parent = ToastHolder
 	addCorner(tick, Theme.Small)
-	addStroke(tick, 0.75, 1)
+	addStroke(tick, 0.82, 1)
 
 	local accent = Instance.new("Frame")
-	accent.Size = UDim2.new(0, 3, 1, -10)
-	accent.Position = UDim2.fromOffset(0, 5)
+	accent.Size = UDim2.new(0, 3, 1, -12)
+	accent.Position = UDim2.fromOffset(0, 6)
 	accent.BackgroundColor3 = kind == "bad" and Theme.Bad or (kind == "good" and Theme.Good or Theme.Accent)
 	accent.BorderSizePixel = 0
 	accent.Parent = tick
 
 	local label = Instance.new("TextLabel")
-	label.Size = UDim2.new(1, -18, 1, -6)
-	label.Position = UDim2.fromOffset(10, 3)
+	label.Size = UDim2.new(1, -22, 1, -8)
+	label.Position = UDim2.fromOffset(12, 4)
 	label.BackgroundTransparency = 1
 	label.Text = tostring(text)
 	label.TextColor3 = Theme.TextPrimary
@@ -708,7 +705,7 @@ local function notify(text, kind)
 	label.TextYAlignment = Enum.TextYAlignment.Center
 	label.TextWrapped = true
 	label.Font = Enum.Font.GothamMedium
-	label.TextSize = 10
+	label.TextSize = 11
 	label.Parent = tick
 
 	local pop = Instance.new("UIScale")
@@ -716,12 +713,12 @@ local function notify(text, kind)
 	pop.Parent = tick
 	tween(pop, Theme.Pop, { Scale = 1 })
 
-	task.delay(2.4, function()
+	task.delay(2.8, function()
 		pcall(function()
 			tween(tick, Theme.Fast, { BackgroundTransparency = 1 })
 			tween(label, Theme.Fast, { TextTransparency = 1 })
 			tween(accent, Theme.Fast, { BackgroundTransparency = 1 })
-			task.delay(0.2, function()
+			task.delay(0.25, function()
 				pcall(function()
 					tick:Destroy()
 				end)
@@ -764,6 +761,7 @@ do
 	end)
 end
 
+-- keep the window reachable no matter where it gets dragged
 local function clampWindow()
 	local camera = workspace.CurrentCamera
 	if not camera then
@@ -824,12 +822,12 @@ local function setMinimized(state)
 			if minimized then
 				MainFrame.Visible = false
 				Mini.Visible = true
-				MiniScale.Scale = 0.9
+				MiniScale.Scale = 0.88
 				tween(MiniScale, Theme.Pop, { Scale = 1 })
 			end
 		end)
 	else
-		local shrink = tween(MiniScale, Theme.Fast, { Scale = 0.9 })
+		local shrink = tween(MiniScale, Theme.Fast, { Scale = 0.86 })
 		shrink.Completed:Connect(function()
 			if not minimized then
 				Mini.Visible = false
@@ -856,24 +854,24 @@ Body.BackgroundTransparency = 1
 Body.Parent = MainFrame
 
 local Sidebar = Instance.new("Frame")
-Sidebar.Size = UDim2.new(0, SIDEBAR_W, 1, 0)
+Sidebar.Size = UDim2.new(0, 132, 1, 0)
 Sidebar.BackgroundColor3 = Theme.BgHeader
-Sidebar.BackgroundTransparency = 0.35
+Sidebar.BackgroundTransparency = 0.45
 Sidebar.BorderSizePixel = 0
 Sidebar.Parent = Body
-addPadding(Sidebar, 8)
+addPadding(Sidebar, 10)
 
 local SidebarList = Instance.new("UIListLayout")
-SidebarList.Padding = UDim.new(0, 5)
+SidebarList.Padding = UDim.new(0, 6)
 SidebarList.SortOrder = Enum.SortOrder.LayoutOrder
 SidebarList.Parent = Sidebar
 
 local Content = Instance.new("Frame")
-Content.Size = UDim2.new(1, -SIDEBAR_W, 1, 0)
-Content.Position = UDim2.fromOffset(SIDEBAR_W, 0)
+Content.Size = UDim2.new(1, -132, 1, 0)
+Content.Position = UDim2.fromOffset(132, 0)
 Content.BackgroundTransparency = 1
 Content.Parent = Body
-addPadding(Content, 8)
+addPadding(Content, 12)
 
 local Pages = {}
 local TabButtons = {}
@@ -884,7 +882,7 @@ local function switchTab(name)
 	for pageName, page in pairs(Pages) do
 		page.Visible = pageName == name
 		if pageName == name then
-			page.Position = UDim2.new(0.03, 0, 0, 0)
+			page.Position = UDim2.new(0.04, 0, 0, 0)
 			tween(page, Theme.TabAnim, { Position = UDim2.fromScale(0, 0) })
 		end
 	end
@@ -892,7 +890,7 @@ local function switchTab(name)
 		local on = name2 == name
 		tween(btn, Theme.TabAnim, {
 			BackgroundColor3 = on and Theme.BgButtonOn or Theme.BgButtonOff,
-			BackgroundTransparency = on and 0.2 or 0.45,
+			BackgroundTransparency = on and 0.25 or 0.55,
 			TextColor3 = on and Theme.TextPrimary or Theme.TextSecondary,
 		})
 	end
@@ -912,7 +910,7 @@ local function createPage(name)
 	page.Parent = Content
 
 	local layout = Instance.new("UIListLayout")
-	layout.Padding = UDim.new(0, 7)
+	layout.Padding = UDim.new(0, 10)
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
 	layout.Parent = page
 
@@ -923,17 +921,17 @@ end
 local function createTabButton(key, labelKey, order)
 	local btn = Instance.new("TextButton")
 	btn.LayoutOrder = order
-	btn.Size = UDim2.new(1, 0, 0, 30)
+	btn.Size = UDim2.new(1, 0, 0, 34)
 	btn.BackgroundColor3 = key == activeTab and Theme.BgButtonOn or Theme.BgButtonOff
-	btn.BackgroundTransparency = key == activeTab and 0.2 or 0.45
+	btn.BackgroundTransparency = key == activeTab and 0.25 or 0.55
 	btn.Text = L(labelKey)
 	btn.TextColor3 = key == activeTab and Theme.TextPrimary or Theme.TextSecondary
-	btn.Font = Enum.Font.GothamSemiBold
-	btn.TextSize = 11
+	btn.Font = Enum.Font.GothamSemibold
+	btn.TextSize = 12
 	btn.AutoButtonColor = false
 	btn.Parent = Sidebar
 	addCorner(btn, Theme.Small)
-	addStroke(btn, 0.78, 1)
+	addStroke(btn, 0.88, 1)
 
 	btn.MouseButton1Click:Connect(function()
 		pulse(btn)
@@ -948,15 +946,15 @@ local pageMain = createPage("Main")
 local pageFarm = createPage("Farm")
 local pageFind = createPage("Find")
 local pageStatus = createPage("Status")
-local pageConfig = createPage("Config")
-local pageSet = createPage("Set")
+local pageConfig = createPage("Configs")
+local pageSet = createPage("Settings")
 
 createTabButton("Main", "tabMain", 1)
 createTabButton("Farm", "tabFarm", 2)
 createTabButton("Find", "tabFind", 3)
 createTabButton("Status", "tabStatus", 4)
-createTabButton("Config", "tabConfig", 5)
-createTabButton("Set", "tabSet", 6)
+createTabButton("Configs", "tabConfig", 5)
+createTabButton("Settings", "tabSet", 6)
 
 -- ============================================================================
 -- 7 · widget library
@@ -996,34 +994,34 @@ local function card(parent, height)
 	frame.BorderSizePixel = 0
 	frame.Parent = parent
 	addCorner(frame, Theme.Small)
-	addStroke(frame, 0.78, 1)
+	addStroke(frame, 0.88, 1)
 	return frame
 end
 
 local function createSection(parent, key)
 	local holder = Instance.new("Frame")
-	holder.Size = UDim2.new(1, -4, 0, 20)
+	holder.Size = UDim2.new(1, -4, 0, 26)
 	holder.BackgroundTransparency = 1
 	holder.LayoutOrder = nextOrder()
 	holder.Parent = parent
 
 	local bar = Instance.new("Frame")
-	bar.Size = UDim2.fromOffset(3, 12)
-	bar.Position = UDim2.fromOffset(2, 4)
+	bar.Size = UDim2.fromOffset(3, 14)
+	bar.Position = UDim2.fromOffset(2, 6)
 	bar.BackgroundColor3 = Theme.Accent
 	bar.BorderSizePixel = 0
 	bar.Parent = holder
 	addCorner(bar, UDim.new(1, 0))
 
 	local label = Instance.new("TextLabel")
-	label.Size = UDim2.new(1, -16, 1, 0)
-	label.Position = UDim2.fromOffset(11, 0)
+	label.Size = UDim2.new(1, -18, 1, 0)
+	label.Position = UDim2.fromOffset(13, 0)
 	label.BackgroundTransparency = 1
 	label.Text = string.upper(L(key))
 	label.TextColor3 = Theme.TextSecondary
 	label.TextXAlignment = Enum.TextXAlignment.Left
 	label.Font = Enum.Font.GothamBold
-	label.TextSize = 10
+	label.TextSize = 11
 	label.Parent = holder
 	label:SetAttribute("i18nKey", key)
 	label:SetAttribute("i18nUpper", true)
@@ -1032,34 +1030,33 @@ local function createSection(parent, key)
 end
 
 local function createToggleCard(parent, titleKey, subKey, defaultState, onChange)
-	local frame = card(parent, 48)
+	local frame = card(parent, 62)
 
 	local title = Instance.new("TextLabel")
-	title.Size = UDim2.new(1, -76, 0, 16)
-	title.Position = UDim2.fromOffset(10, 6)
+	title.Size = UDim2.new(1, -90, 0, 20)
+	title.Position = UDim2.fromOffset(12, 10)
 	title.BackgroundTransparency = 1
 	title.Text = L(titleKey)
 	title.TextColor3 = Theme.TextPrimary
 	title.TextXAlignment = Enum.TextXAlignment.Left
-	title.Font = Enum.Font.GothamSemiBold
-	title.TextSize = 11
+	title.Font = Enum.Font.GothamSemibold
+	title.TextSize = 13
 	title.Parent = frame
 
 	local sub = Instance.new("TextLabel")
-	sub.Size = UDim2.new(1, -76, 0, 14)
-	sub.Position = UDim2.fromOffset(10, 24)
+	sub.Size = UDim2.new(1, -90, 0, 16)
+	sub.Position = UDim2.fromOffset(12, 32)
 	sub.BackgroundTransparency = 1
 	sub.Text = L(subKey)
 	sub.TextColor3 = Theme.TextSecondary
 	sub.TextXAlignment = Enum.TextXAlignment.Left
-	sub.TextTruncate = Enum.TextTruncate.AtEnd
 	sub.Font = Enum.Font.Gotham
-	sub.TextSize = 10
+	sub.TextSize = 11
 	sub.Parent = frame
 
 	local switch = Instance.new("TextButton")
-	switch.Size = UDim2.fromOffset(40, 20)
-	switch.Position = UDim2.new(1, -50, 0.5, -10)
+	switch.Size = UDim2.fromOffset(46, 24)
+	switch.Position = UDim2.new(1, -58, 0.5, -12)
 	switch.BackgroundColor3 = defaultState and Theme.BgButtonOn or Theme.BgButtonOff
 	switch.BackgroundTransparency = 0.15
 	switch.Text = ""
@@ -1068,8 +1065,8 @@ local function createToggleCard(parent, titleKey, subKey, defaultState, onChange
 	addCorner(switch, UDim.new(1, 0))
 
 	local knob = Instance.new("Frame")
-	knob.Size = UDim2.fromOffset(14, 14)
-	knob.Position = defaultState and UDim2.fromOffset(23, 3) or UDim2.fromOffset(3, 3)
+	knob.Size = UDim2.fromOffset(18, 18)
+	knob.Position = defaultState and UDim2.fromOffset(25, 3) or UDim2.fromOffset(3, 3)
 	knob.BackgroundColor3 = Theme.TextPrimary
 	knob.BorderSizePixel = 0
 	knob.Parent = switch
@@ -1089,17 +1086,12 @@ local function createToggleCard(parent, titleKey, subKey, defaultState, onChange
 			BackgroundColor3 = state and Theme.BgButtonOn or Theme.BgButtonOff,
 		})
 		tween(knob, Theme.Pop, {
-			Position = state and UDim2.fromOffset(23, 3) or UDim2.fromOffset(3, 3),
+			Position = state and UDim2.fromOffset(25, 3) or UDim2.fromOffset(3, 3),
 		})
 	end
 
 	function handle.SetSilent(state)
-		state = state and true or false
-		active = state
-		handle.State = state
-		frame.BackgroundColor3 = state and Theme.BgCardActive or Theme.BgCard
-		switch.BackgroundColor3 = state and Theme.BgButtonOn or Theme.BgButtonOff
-		knob.Position = state and UDim2.fromOffset(23, 3) or UDim2.fromOffset(3, 3)
+		handle.Set(state)
 	end
 
 	function handle.RefreshText()
@@ -1121,45 +1113,44 @@ local function createToggleCard(parent, titleKey, subKey, defaultState, onChange
 end
 
 local function createSliderCard(parent, titleKey, subKey, min, max, default, step, onChange)
-	local frame = card(parent, 52)
+	local frame = card(parent, 62)
 
 	local title = Instance.new("TextLabel")
-	title.Size = UDim2.new(1, -90, 0, 16)
-	title.Position = UDim2.fromOffset(10, 6)
+	title.Size = UDim2.new(1, -110, 0, 20)
+	title.Position = UDim2.fromOffset(12, 10)
 	title.BackgroundTransparency = 1
 	title.Text = L(titleKey)
 	title.TextColor3 = Theme.TextPrimary
 	title.TextXAlignment = Enum.TextXAlignment.Left
-	title.Font = Enum.Font.GothamSemiBold
-	title.TextSize = 11
+	title.Font = Enum.Font.GothamSemibold
+	title.TextSize = 13
 	title.Parent = frame
 
 	local sub = Instance.new("TextLabel")
-	sub.Size = UDim2.new(1, -90, 0, 14)
-	sub.Position = UDim2.fromOffset(10, 21)
+	sub.Size = UDim2.new(1, -110, 0, 16)
+	sub.Position = UDim2.fromOffset(12, 32)
 	sub.BackgroundTransparency = 1
 	sub.Text = L(subKey)
 	sub.TextColor3 = Theme.TextSecondary
 	sub.TextXAlignment = Enum.TextXAlignment.Left
-	sub.TextTruncate = Enum.TextTruncate.AtEnd
 	sub.Font = Enum.Font.Gotham
-	sub.TextSize = 10
+	sub.TextSize = 11
 	sub.Parent = frame
 
 	local valueLabel = Instance.new("TextLabel")
-	valueLabel.Size = UDim2.new(0, 74, 0, 16)
-	valueLabel.Position = UDim2.new(1, -84, 0, 7)
+	valueLabel.Size = UDim2.new(0, 92, 0, 20)
+	valueLabel.Position = UDim2.new(1, -104, 0, 10)
 	valueLabel.BackgroundTransparency = 1
 	valueLabel.Text = tostring(default)
 	valueLabel.TextColor3 = Theme.Accent
 	valueLabel.TextXAlignment = Enum.TextXAlignment.Right
 	valueLabel.Font = Enum.Font.GothamBold
-	valueLabel.TextSize = 11
+	valueLabel.TextSize = 13
 	valueLabel.Parent = frame
 
 	local track = Instance.new("Frame")
-	track.Size = UDim2.new(1, -20, 0, 5)
-	track.Position = UDim2.new(0, 10, 1, -12)
+	track.Size = UDim2.new(1, -24, 0, 6)
+	track.Position = UDim2.new(0, 12, 1, -11)
 	track.BackgroundColor3 = Theme.BgInput
 	track.BorderSizePixel = 0
 	track.Parent = frame
@@ -1173,7 +1164,7 @@ local function createSliderCard(parent, titleKey, subKey, min, max, default, ste
 	addCorner(fill, UDim.new(1, 0))
 
 	local knob = Instance.new("Frame")
-	knob.Size = UDim2.fromOffset(12, 12)
+	knob.Size = UDim2.fromOffset(14, 14)
 	knob.AnchorPoint = Vector2.new(0.5, 0.5)
 	knob.Position = UDim2.new(0, 0, 0.5, 0)
 	knob.BackgroundColor3 = Theme.TextPrimary
@@ -1181,7 +1172,7 @@ local function createSliderCard(parent, titleKey, subKey, min, max, default, ste
 	knob.ZIndex = 2
 	knob.Parent = track
 	addCorner(knob, UDim.new(1, 0))
-	addStroke(knob, 0.35, 1.5)
+	addStroke(knob, 0.4, 2)
 
 	local handle = { Value = default }
 	local dragSource = nil
@@ -1235,8 +1226,10 @@ local function createSliderCard(parent, titleKey, subKey, min, max, default, ste
 	end
 
 	UserInputService.InputChanged:Connect(function(input)
-		if dragSource and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-			commit(valueFromX(input.Position.X))
+		if dragSource and (input == dragSource or input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+			if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+				commit(valueFromX(input.Position.X))
+			end
 		end
 	end)
 
@@ -1262,39 +1255,48 @@ local function createSliderCard(parent, titleKey, subKey, min, max, default, ste
 end
 
 local function createButtonCard(parent, titleKey, subKey, bgColor, onClick)
-	local frame = card(parent, 44)
+	local frame = card(parent, 62)
 
 	local btn = Instance.new("TextButton")
 	btn.Size = UDim2.fromScale(1, 1)
 	btn.BackgroundColor3 = bgColor or Theme.BgButtonOff
-	btn.BackgroundTransparency = 0.55
+	btn.BackgroundTransparency = 0.72
 	btn.Text = ""
 	btn.AutoButtonColor = false
 	btn.Parent = frame
 	addCorner(btn, Theme.Small)
 
 	local title = Instance.new("TextLabel")
-	title.Size = UDim2.new(1, -20, 0, 16)
-	title.Position = UDim2.fromOffset(10, 5)
+	title.Size = UDim2.new(1, -50, 0, 20)
+	title.Position = UDim2.fromOffset(12, 10)
 	title.BackgroundTransparency = 1
 	title.Text = L(titleKey)
 	title.TextColor3 = Theme.TextPrimary
 	title.TextXAlignment = Enum.TextXAlignment.Left
-	title.Font = Enum.Font.GothamSemiBold
-	title.TextSize = 11
+	title.Font = Enum.Font.GothamSemibold
+	title.TextSize = 13
 	title.Parent = frame
 
 	local sub = Instance.new("TextLabel")
-	sub.Size = UDim2.new(1, -20, 0, 14)
-	sub.Position = UDim2.fromOffset(10, 22)
+	sub.Size = UDim2.new(1, -50, 0, 16)
+	sub.Position = UDim2.fromOffset(12, 32)
 	sub.BackgroundTransparency = 1
 	sub.Text = L(subKey)
 	sub.TextColor3 = Theme.TextSecondary
 	sub.TextXAlignment = Enum.TextXAlignment.Left
-	sub.TextTruncate = Enum.TextTruncate.AtEnd
 	sub.Font = Enum.Font.Gotham
-	sub.TextSize = 10
+	sub.TextSize = 11
 	sub.Parent = frame
+
+	local arrow = Instance.new("TextLabel")
+	arrow.Size = UDim2.fromOffset(24, 24)
+	arrow.Position = UDim2.new(1, -36, 0.5, -12)
+	arrow.BackgroundTransparency = 1
+	arrow.Text = ">"
+	arrow.TextColor3 = Theme.Accent
+	arrow.Font = Enum.Font.GothamBold
+	arrow.TextSize = 13
+	arrow.Parent = frame
 
 	local handle = { Frame = frame, Button = btn }
 	btn.MouseButton1Click:Connect(function()
@@ -1316,64 +1318,63 @@ local function createButtonCard(parent, titleKey, subKey, bgColor, onClick)
 end
 
 local function createDropdownCard(parent, titleKey, subKey, values, defaultIndex, onChange)
-	local rowHeight = 22
-	local frame = card(parent, 48)
+	local rowHeight = 24
+	local frame = card(parent, 62)
 	frame.ClipsDescendants = false
 
 	local title = Instance.new("TextLabel")
-	title.Size = UDim2.new(1, -158, 0, 16)
-	title.Position = UDim2.fromOffset(10, 6)
+	title.Size = UDim2.new(1, -190, 0, 20)
+	title.Position = UDim2.fromOffset(12, 10)
 	title.BackgroundTransparency = 1
 	title.Text = L(titleKey)
 	title.TextColor3 = Theme.TextPrimary
 	title.TextXAlignment = Enum.TextXAlignment.Left
-	title.Font = Enum.Font.GothamSemiBold
-	title.TextSize = 11
+	title.Font = Enum.Font.GothamSemibold
+	title.TextSize = 13
 	title.Parent = frame
 
 	local sub = Instance.new("TextLabel")
-	sub.Size = UDim2.new(1, -158, 0, 14)
-	sub.Position = UDim2.fromOffset(10, 24)
+	sub.Size = UDim2.new(1, -190, 0, 16)
+	sub.Position = UDim2.fromOffset(12, 32)
 	sub.BackgroundTransparency = 1
 	sub.Text = L(subKey)
 	sub.TextColor3 = Theme.TextSecondary
 	sub.TextXAlignment = Enum.TextXAlignment.Left
-	sub.TextTruncate = Enum.TextTruncate.AtEnd
 	sub.Font = Enum.Font.Gotham
-	sub.TextSize = 10
+	sub.TextSize = 11
 	sub.Parent = frame
 
 	local selector = Instance.new("TextButton")
-	selector.Size = UDim2.new(0, 140, 0, 24)
-	selector.Position = UDim2.new(1, -150, 0.5, -12)
+	selector.Size = UDim2.new(0, 168, 0, 28)
+	selector.Position = UDim2.new(1, -180, 0.5, -14)
 	selector.BackgroundColor3 = Theme.BgInput
 	selector.BackgroundTransparency = 0.2
 	selector.Text = tostring(values[defaultIndex] or values[1] or "-")
 	selector.TextColor3 = Theme.TextPrimary
 	selector.TextXAlignment = Enum.TextXAlignment.Left
 	selector.Font = Enum.Font.GothamMedium
-	selector.TextSize = 10
+	selector.TextSize = 11
 	selector.AutoButtonColor = false
 	selector.TextTruncate = Enum.TextTruncate.AtEnd
 	selector.Parent = frame
 	addCorner(selector, Theme.Pill)
-	addStroke(selector, 0.78, 1)
+	addStroke(selector, 0.85, 1)
 	addPadding(selector, 6)
 
 	local chevron = Instance.new("TextLabel")
-	chevron.Size = UDim2.fromOffset(16, 16)
-	chevron.Position = UDim2.new(1, -20, 0.5, -8)
+	chevron.Size = UDim2.fromOffset(20, 20)
+	chevron.Position = UDim2.new(1, -24, 0.5, -10)
 	chevron.BackgroundTransparency = 1
 	chevron.Text = "v"
 	chevron.TextColor3 = Theme.TextSecondary
 	chevron.Font = Enum.Font.GothamBold
-	chevron.TextSize = 9
+	chevron.TextSize = 10
 	chevron.ZIndex = 3
 	chevron.Parent = selector
 
 	local listHolder = Instance.new("Frame")
-	listHolder.Size = UDim2.new(1, -20, 0, 0)
-	listHolder.Position = UDim2.fromOffset(10, 48)
+	listHolder.Size = UDim2.new(1, -24, 0, 0)
+	listHolder.Position = UDim2.fromOffset(12, 62)
 	listHolder.BackgroundColor3 = Theme.BgInput
 	listHolder.BackgroundTransparency = 0.08
 	listHolder.BorderSizePixel = 0
@@ -1382,7 +1383,7 @@ local function createDropdownCard(parent, titleKey, subKey, values, defaultIndex
 	listHolder.ZIndex = 4
 	listHolder.Parent = frame
 	addCorner(listHolder, Theme.Pill)
-	addStroke(listHolder, 0.78, 1)
+	addStroke(listHolder, 0.88, 1)
 
 	local listLayout = Instance.new("UIListLayout")
 	listLayout.SortOrder = Enum.SortOrder.LayoutOrder
@@ -1398,11 +1399,11 @@ local function createDropdownCard(parent, titleKey, subKey, values, defaultIndex
 		listHolder.Visible = state
 		chevron.Text = state and "^" or "v"
 		if state then
-			listHolder.Size = UDim2.new(1, -20, 0, #values * rowHeight + 4)
-			frame.Size = UDim2.new(1, -4, 0, 54 + #values * rowHeight)
+			listHolder.Size = UDim2.new(1, -24, 0, #values * rowHeight + 4)
+			frame.Size = UDim2.new(1, -4, 0, 68 + #values * rowHeight)
 		else
-			listHolder.Size = UDim2.new(1, -20, 0, 0)
-			frame.Size = UDim2.new(1, -4, 0, 48)
+			listHolder.Size = UDim2.new(1, -24, 0, 0)
+			frame.Size = UDim2.new(1, -4, 0, 62)
 		end
 	end
 
@@ -1422,7 +1423,7 @@ local function createDropdownCard(parent, titleKey, subKey, values, defaultIndex
 			row.TextColor3 = index == handle.Index and Theme.Accent or Theme.TextPrimary
 			row.TextXAlignment = Enum.TextXAlignment.Left
 			row.Font = Enum.Font.GothamMedium
-			row.TextSize = 10
+			row.TextSize = 11
 			row.AutoButtonColor = false
 			row.TextTruncate = Enum.TextTruncate.AtEnd
 			row.ZIndex = 5
@@ -1481,35 +1482,36 @@ local function createTextPanel(parent, titleKey, height, note)
 	local frame = card(parent, height)
 
 	local label = Instance.new("TextLabel")
-	label.Size = UDim2.new(1, -20, 0, 18)
-	label.Position = UDim2.fromOffset(10, 4)
+	label.Size = UDim2.new(1, -24, 0, 22)
+	label.Position = UDim2.fromOffset(12, 6)
 	label.BackgroundTransparency = 1
 	label.Text = string.upper(L(titleKey))
 	label.TextColor3 = Theme.TextSecondary
 	label.TextXAlignment = Enum.TextXAlignment.Left
 	label.Font = Enum.Font.GothamBold
-	label.TextSize = 9
+	label.TextSize = 10
 	label.Parent = frame
 	label:SetAttribute("i18nKey", titleKey)
 	label:SetAttribute("i18nUpper", true)
 
-	local noteLabel = Instance.new("TextLabel")
-	noteLabel.Size = UDim2.new(0, 130, 0, 18)
-	noteLabel.Position = UDim2.new(1, -140, 0, 4)
+	local noteLabel
+	noteLabel = Instance.new("TextLabel")
+	noteLabel.Size = UDim2.new(0, 150, 0, 22)
+	noteLabel.Position = UDim2.new(1, -162, 0, 6)
 	noteLabel.BackgroundTransparency = 1
 	noteLabel.Text = note or ""
 	noteLabel.TextColor3 = Theme.Accent
 	noteLabel.TextXAlignment = Enum.TextXAlignment.Right
 	noteLabel.TextTruncate = Enum.TextTruncate.AtEnd
 	noteLabel.Font = Enum.Font.Code
-	noteLabel.TextSize = 9
+	noteLabel.TextSize = 10
 	noteLabel.Parent = frame
 
 	local scroll = Instance.new("ScrollingFrame")
-	scroll.Size = UDim2.new(1, -14, 1, -28)
-	scroll.Position = UDim2.fromOffset(7, 23)
+	scroll.Size = UDim2.new(1, -16, 1, -36)
+	scroll.Position = UDim2.fromOffset(8, 30)
 	scroll.BackgroundColor3 = Theme.BgInput
-	scroll.BackgroundTransparency = 0.35
+	scroll.BackgroundTransparency = 0.45
 	scroll.BorderSizePixel = 0
 	scroll.ScrollBarThickness = 3
 	scroll.ScrollBarImageColor3 = Theme.Accent
@@ -1518,7 +1520,7 @@ local function createTextPanel(parent, titleKey, height, note)
 	scroll.ScrollingDirection = Enum.ScrollingDirection.XY
 	scroll.Parent = frame
 	addCorner(scroll, Theme.Pill)
-	addPadding(scroll, 5)
+	addPadding(scroll, 6)
 
 	local text = Instance.new("TextLabel")
 	text.BackgroundTransparency = 1
@@ -1528,7 +1530,7 @@ local function createTextPanel(parent, titleKey, height, note)
 	text.TextYAlignment = Enum.TextYAlignment.Top
 	text.TextWrapped = false
 	text.Font = Enum.Font.Code
-	text.TextSize = 10
+	text.TextSize = 11
 	text.AutomaticSize = Enum.AutomaticSize.XY
 	text.Size = UDim2.fromOffset(0, 0)
 	text.Parent = scroll
@@ -1641,6 +1643,8 @@ local function parkOnTreadmill()
 	return result
 end
 
+-- the server pins the root every render frame through this binding. it has to be
+-- unbound or no teleport sticks and the session can never be left
 local function releasePose()
 	pcall(function()
 		RunService:UnbindFromRenderStep("SlashTreadmillPose")
@@ -1741,7 +1745,7 @@ local function petTable(zoneIndex)
 	end)
 
 	local lines = {}
-	table.insert(lines, pad("PET", 20) .. pad("RARITY", 12) .. pad("ODDS", 22) .. pad("CASH", 12) .. "OWNED")
+	table.insert(lines, pad("PET", 18) .. pad("RARITY", 10) .. pad("ODDS", 18) .. pad("CASH", 11) .. "OWNED")
 	for _, pet in ipairs(sorted) do
 		local chance = tonumber(pet.Chance) or 0
 		local odds = "-"
@@ -1751,7 +1755,7 @@ local function petTable(zoneIndex)
 		local owned = S.ownedPets[norm(pet.Name)] and "YES" or "-"
 		table.insert(
 			lines,
-			pad(pet.Name, 20) .. pad(pet.Rarity or "?", 12) .. pad(odds, 22) .. pad("$" .. fmt(pet.Cash or 0), 12) .. owned
+			pad(pet.Name, 18) .. pad(pet.Rarity or "?", 10) .. pad(odds, 18) .. pad("$" .. fmt(pet.Cash or 0), 11) .. owned
 		)
 	end
 	return table.concat(lines, "\n")
@@ -1767,10 +1771,10 @@ local function eggTable(entry)
 		if type(def) == "table" then
 			table.insert(
 				lines,
-				pad(eggName, 22) .. pad("HP " .. tostring(def.Health or "?"), 18) .. "LUCK x" .. tostring(def.Luck or "?")
+				pad(eggName, 20) .. pad("HP " .. tostring(def.Health or "?"), 14) .. "LUCK x" .. tostring(def.Luck or "?")
 			)
 		else
-			table.insert(lines, pad(eggName, 22) .. "no data")
+			table.insert(lines, pad(eggName, 20) .. "no data")
 		end
 	end
 	if #lines == 0 then
@@ -1856,11 +1860,13 @@ local function insideSafe()
 	return math.abs(localPos.X) <= half.X and math.abs(localPos.Y) <= half.Y and math.abs(localPos.Z) <= half.Z
 end
 
+-- enters from the near face: same side as whoever is coming, just inside the lip
 local function dashToSafe(fromPosition)
 	local zone, hrp = safeZone(), root()
 	if not (zone and hrp) then
 		return false
 	end
+	releasePose()
 	local probe = fromPosition or hrp.Position
 	local localPos = zone.CFrame:PointToObjectSpace(probe)
 	local dir = Vector3.new(localPos.X, 0, localPos.Z)
@@ -1972,23 +1978,40 @@ local function attemptSteal()
 	end
 
 	S.stealPhase = "teleport ke pet"
+	local everPlaced = false
+
 	for _, offset in ipairs(STEAL_OFFSETS) do
-		hrp.AssemblyLinearVelocity = Vector3.zero
-		hrp.AssemblyAngularVelocity = Vector3.zero
-		hrp.CFrame = CFrame.new(target.part.Position + offset)
-		task.wait(0.1)
+		local goal = target.part.Position + offset
+		local placed = false
 
-		S.stealPhase = "trigger steal"
-		firePrompt(target.prompt)
-
-		if waitForCarry(1.6) then
-			return true, "carrying"
+		-- the treadmill pose binding snaps the root back every render frame, so
+		-- the teleport has to be re-applied after unbinding and then verified
+		for _ = 1, 3 do
+			releasePose()
+			hrp.AssemblyLinearVelocity = Vector3.zero
+			hrp.AssemblyAngularVelocity = Vector3.zero
+			hrp.CFrame = CFrame.new(goal)
+			task.wait(0.1)
+			if (hrp.Position - target.part.Position).Magnitude < 12 then
+				placed = true
+				everPlaced = true
+				break
+			end
 		end
-		if not alive() or S.stealAbort then
-			return false, "aborted"
+
+		if placed then
+			S.stealPhase = "trigger steal"
+			firePrompt(target.prompt)
+			if waitForCarry(1.2) then
+				return true, "carrying"
+			end
+			if not alive() or S.stealAbort then
+				return false, "aborted"
+			end
 		end
 	end
-	return false, "prompt denied"
+
+	return false, everPlaced and "prompt denied" or "teleport blocked"
 end
 
 local function bankLoop()
@@ -2014,8 +2037,11 @@ end
 
 local function stealCycle(silent)
 	S.stealAbort = false
+	-- the treadmill pose binding would drag us straight back to the deck
 	if S.treadmillOn then
 		leaveTreadmill()
+	else
+		releasePose()
 	end
 
 	S.stealPhase = "cari target"
@@ -2063,6 +2089,7 @@ local function stealLoop()
 		while alive() and S.stealOn do
 			local carrying = LocalPlayer:GetAttribute("SlashCarrying")
 			if carrying then
+				-- already holding something: finish the run instead of stacking
 				S.stealPhase = "bawa carry lama"
 				dashToSafe()
 				local banked, seconds = bankLoop()
@@ -2108,6 +2135,7 @@ local function guardTick()
 		local spawn = plot and plot:FindFirstChild("SpawnPoint")
 		local hrp = root()
 		if spawn and hrp then
+			releasePose()
 			hrp.AssemblyLinearVelocity = Vector3.zero
 			hrp.CFrame = spawn.CFrame + Vector3.new(0, 4, 0)
 		end
@@ -2254,7 +2282,7 @@ createButtonCard(pageFarm, "tpPlot", "tpPlotSub", Theme.BgButtonOff, function()
 	end
 end)
 
-UI.sessionPanel = createTextPanel(pageFarm, "liveTitle", 76)
+UI.sessionPanel = createTextPanel(pageFarm, "liveTitle", 92)
 
 createSection(pageFarm, "secSteal")
 
@@ -2280,7 +2308,7 @@ createButtonCard(pageFarm, "stealOnce", "stealOnceSub", Theme.BgButtonOn, functi
 	end)
 end)
 
-UI.stealPanel = createTextPanel(pageFarm, "stealInfo", 86)
+UI.stealPanel = createTextPanel(pageFarm, "stealInfo", 104)
 
 createSection(pageFarm, "secGuard")
 
@@ -2309,9 +2337,9 @@ for _, entry in ipairs(ZONE_ORDER) do
 	table.insert(zoneValues, zoneLabel(entry))
 end
 
-UI.eggsPanel = createTextPanel(pageFind, "eggsTitle", 96)
-UI.poolPanel = createTextPanel(pageFind, "poolTitle", 150)
-UI.ownedPanel = createTextPanel(pageFind, "ownedTitle", 72)
+UI.eggsPanel = createTextPanel(pageFind, "eggsTitle", 118)
+UI.poolPanel = createTextPanel(pageFind, "poolTitle", 196)
+UI.ownedPanel = createTextPanel(pageFind, "ownedTitle", 92)
 
 local function renderZone(entry)
 	if not entry then
@@ -2358,8 +2386,8 @@ end)
 -- ============================================================================
 createSection(pageStatus, "secLive")
 
-UI.statusPanel = createTextPanel(pageStatus, "liveTitle", 172)
-UI.invPanel = createTextPanel(pageStatus, "invTitle", 96)
+UI.statusPanel = createTextPanel(pageStatus, "liveTitle", 226)
+UI.invPanel = createTextPanel(pageStatus, "invTitle", 128)
 
 createButtonCard(pageStatus, "refreshStatus", "refreshStatusSub", Theme.BgCardActive, function()
 	refreshProfile()
@@ -2455,22 +2483,22 @@ local function applyProfile(profile)
 end
 
 do
-	local manager = card(pageConfig, 102)
+	local manager = card(pageConfig, 118)
 
 	local meta = Instance.new("TextLabel")
-	meta.Size = UDim2.new(1, -20, 0, 14)
-	meta.Position = UDim2.fromOffset(10, 8)
+	meta.Size = UDim2.new(1, -24, 0, 18)
+	meta.Position = UDim2.fromOffset(12, 10)
 	meta.BackgroundTransparency = 1
 	meta.Text = ""
 	meta.TextColor3 = Theme.TextSecondary
 	meta.TextXAlignment = Enum.TextXAlignment.Left
 	meta.Font = Enum.Font.GothamMedium
-	meta.TextSize = 10
+	meta.TextSize = 11
 	meta.Parent = manager
 
 	local input = Instance.new("TextBox")
-	input.Size = UDim2.new(1, -20, 0, 26)
-	input.Position = UDim2.fromOffset(10, 25)
+	input.Size = UDim2.new(1, -24, 0, 32)
+	input.Position = UDim2.fromOffset(12, 34)
 	input.BackgroundColor3 = Theme.BgInput
 	input.BackgroundTransparency = 0.2
 	input.Text = Store.selected
@@ -2480,47 +2508,47 @@ do
 	input.TextXAlignment = Enum.TextXAlignment.Left
 	input.ClearTextOnFocus = false
 	input.Font = Enum.Font.GothamMedium
-	input.TextSize = 11
+	input.TextSize = 12
 	input.Parent = manager
 	addCorner(input, Theme.Pill)
-	addStroke(input, 0.78, 1)
-	addPadding(input, 6)
+	addStroke(input, 0.85, 1)
+	addPadding(input, 8)
 
 	local function actionButton(labelKey, xScale, widthScale, bg)
 		local btn = Instance.new("TextButton")
-		btn.Size = UDim2.new(widthScale, -8, 0, 26)
-		btn.Position = UDim2.new(xScale, 10, 0, 62)
+		btn.Size = UDim2.new(widthScale, -10, 0, 30)
+		btn.Position = UDim2.new(xScale, 12, 0, 74)
 		btn.BackgroundColor3 = bg
 		btn.BackgroundTransparency = 0.2
 		btn.Text = L(labelKey)
 		btn.TextColor3 = Theme.TextPrimary
-		btn.Font = Enum.Font.GothamSemiBold
-		btn.TextSize = 10
+		btn.Font = Enum.Font.GothamSemibold
+		btn.TextSize = 11
 		btn.AutoButtonColor = false
 		btn.Parent = manager
 		addCorner(btn, Theme.Pill)
-		addStroke(btn, 0.78, 1)
+		addStroke(btn, 0.85, 1)
 		btn:SetAttribute("i18nKey", labelKey)
 		return btn
 	end
 
-	local historyCard = card(pageConfig, 136)
+	local historyCard = card(pageConfig, 152)
 
 	local historyTitle = Instance.new("TextLabel")
-	historyTitle.Size = UDim2.new(1, -20, 0, 18)
-	historyTitle.Position = UDim2.fromOffset(10, 6)
+	historyTitle.Size = UDim2.new(1, -24, 0, 22)
+	historyTitle.Position = UDim2.fromOffset(12, 8)
 	historyTitle.BackgroundTransparency = 1
 	historyTitle.Text = L("historyTitle")
 	historyTitle.TextColor3 = Theme.TextPrimary
 	historyTitle.TextXAlignment = Enum.TextXAlignment.Left
-	historyTitle.Font = Enum.Font.GothamSemiBold
-	historyTitle.TextSize = 10
+	historyTitle.Font = Enum.Font.GothamSemibold
+	historyTitle.TextSize = 12
 	historyTitle.Parent = historyCard
 	historyTitle:SetAttribute("i18nKey", "historyTitle")
 
 	local historyScroll = Instance.new("ScrollingFrame")
-	historyScroll.Size = UDim2.new(1, -16, 1, -30)
-	historyScroll.Position = UDim2.fromOffset(8, 25)
+	historyScroll.Size = UDim2.new(1, -20, 1, -38)
+	historyScroll.Position = UDim2.fromOffset(10, 32)
 	historyScroll.BackgroundColor3 = Theme.BgInput
 	historyScroll.BackgroundTransparency = 0.35
 	historyScroll.BorderSizePixel = 0
@@ -2530,7 +2558,7 @@ do
 	historyScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	historyScroll.Parent = historyCard
 	addCorner(historyScroll, Theme.Pill)
-	addPadding(historyScroll, 5)
+	addPadding(historyScroll, 6)
 
 	local holder = Instance.new("Frame")
 	holder.Size = UDim2.new(1, 0, 0, 0)
@@ -2539,7 +2567,7 @@ do
 	holder.Parent = historyScroll
 
 	local list = Instance.new("UIListLayout")
-	list.Padding = UDim.new(0, 2)
+	list.Padding = UDim.new(0, 3)
 	list.SortOrder = Enum.SortOrder.LayoutOrder
 	list.Parent = holder
 
@@ -2560,27 +2588,27 @@ do
 		end
 		if #Store.history == 0 then
 			local empty = Instance.new("TextLabel")
-			empty.Size = UDim2.new(1, 0, 0, 16)
+			empty.Size = UDim2.new(1, 0, 0, 18)
 			empty.BackgroundTransparency = 1
 			empty.Text = L("historyEmpty")
 			empty.TextColor3 = Theme.TextSecondary
 			empty.TextXAlignment = Enum.TextXAlignment.Left
 			empty.Font = Enum.Font.Gotham
-			empty.TextSize = 10
+			empty.TextSize = 11
 			empty.Parent = holder
 			return
 		end
 		for index, item in ipairs(Store.history) do
 			local row = Instance.new("TextLabel")
 			row.LayoutOrder = index
-			row.Size = UDim2.new(1, 0, 0, 15)
+			row.Size = UDim2.new(1, 0, 0, 17)
 			row.BackgroundTransparency = 1
 			row.Text = string.format("[%s] %s > %s", tostring(item.timeLabel), tostring(item.action), tostring(item.configName))
 			row.TextColor3 = (item.action == "SAVE" or item.action == "CREATE") and Theme.Good
 				or (item.action == "LOAD" and Theme.Accent or Theme.TextSecondary)
 			row.TextXAlignment = Enum.TextXAlignment.Left
 			row.Font = Enum.Font.Code
-			row.TextSize = 10
+			row.TextSize = 11
 			row.Parent = holder
 		end
 	end
@@ -2677,53 +2705,52 @@ end
 createSection(pageSet, "secUi")
 
 do
-	local langCard = card(pageSet, 48)
+	local langCard = card(pageSet, 58)
 
 	local title = Instance.new("TextLabel")
-	title.Size = UDim2.new(1, -76, 0, 16)
-	title.Position = UDim2.fromOffset(10, 6)
+	title.Size = UDim2.new(1, -90, 0, 20)
+	title.Position = UDim2.fromOffset(12, 8)
 	title.BackgroundTransparency = 1
 	title.Text = L("langTitle")
 	title.TextColor3 = Theme.TextPrimary
 	title.TextXAlignment = Enum.TextXAlignment.Left
-	title.Font = Enum.Font.GothamSemiBold
-	title.TextSize = 11
+	title.Font = Enum.Font.GothamSemibold
+	title.TextSize = 13
 	title.Parent = langCard
 	title:SetAttribute("i18nKey", "langTitle")
 
 	local sub = Instance.new("TextLabel")
-	sub.Size = UDim2.new(1, -76, 0, 14)
-	sub.Position = UDim2.fromOffset(10, 24)
+	sub.Size = UDim2.new(1, -90, 0, 16)
+	sub.Position = UDim2.fromOffset(12, 30)
 	sub.BackgroundTransparency = 1
 	sub.Text = L("langSub")
 	sub.TextColor3 = Theme.TextSecondary
 	sub.TextXAlignment = Enum.TextXAlignment.Left
-	sub.TextTruncate = Enum.TextTruncate.AtEnd
 	sub.Font = Enum.Font.Gotham
-	sub.TextSize = 10
+	sub.TextSize = 11
 	sub.Parent = langCard
 	sub:SetAttribute("i18nKey", "langSub")
 
 	local langBtn = Instance.new("TextButton")
-	langBtn.Size = UDim2.fromOffset(42, 22)
-	langBtn.Position = UDim2.new(1, -52, 0.5, -11)
+	langBtn.Size = UDim2.fromOffset(48, 26)
+	langBtn.Position = UDim2.new(1, -60, 0.5, -13)
 	langBtn.BackgroundColor3 = Theme.BgButtonOn
-	langBtn.BackgroundTransparency = 0.15
+	langBtn.BackgroundTransparency = 0.2
 	langBtn.Text = LANG == 1 and "EN" or "ID"
 	langBtn.TextColor3 = Theme.TextPrimary
 	langBtn.Font = Enum.Font.GothamBold
-	langBtn.TextSize = 10
+	langBtn.TextSize = 12
 	langBtn.AutoButtonColor = false
 	langBtn.Parent = langCard
 	addCorner(langBtn, Theme.Pill)
-	addStroke(langBtn, 0.78, 1)
+	addStroke(langBtn, 0.85, 1)
 
 	UI.langButton = langBtn
 end
 
-UI.scaleSlider = createSliderCard(pageSet, "uiScale", "uiScaleSub", 0.65, 1.25, 0.9, 0.05, function(value)
+UI.scaleSlider = createSliderCard(pageSet, "uiScale", "uiScaleSub", 0.7, 1.3, 1, 0.05, function(value)
 	MainScale.Scale = value
-	MiniScale.Scale = value
+	MiniScale.Scale = value * 0.9
 end)
 
 createSection(pageSet, "secDanger")
@@ -2733,7 +2760,7 @@ createButtonCard(pageSet, "closeHub", "closeHubSub", Color3.fromRGB(140, 30, 30)
 end)
 
 -- ============================================================================
--- 19 · language pass
+-- 19 · language pass · every label is re-resolved from its own text
 -- ============================================================================
 local REVERSE = {}
 for key, entry in pairs(T) do
@@ -2763,9 +2790,7 @@ local function refreshLanguage()
 	if UI.langButton then
 		UI.langButton.Text = LANG == 1 and "EN" or "ID"
 	end
-	if UI.refreshConfigUi then
-		UI.refreshConfigUi()
-	end
+	UI.refreshConfigUi()
 end
 
 UI.langButton.MouseButton1Click:Connect(function()
@@ -2844,6 +2869,7 @@ table.insert(
 	end)
 )
 
+-- slow loop: treadmill watchdog, gain sampling, panels
 table.insert(
 	S.connections,
 	task.spawn(function()
@@ -2855,6 +2881,7 @@ table.insert(
 				return
 			end
 
+			-- treadmill watchdog
 			pcall(function()
 				if not S.treadmillOn then
 					return
@@ -2871,6 +2898,7 @@ table.insert(
 				end
 			end)
 
+			-- gain per second
 			local power = LocalPlayer:GetAttribute("SpeedPower")
 			if typeof(power) == "number" then
 				local delta = os.clock() - lastGainSample
@@ -2881,6 +2909,7 @@ table.insert(
 				lastGainSample = os.clock()
 			end
 
+			-- farm session panel
 			if UI.sessionPanel then
 				UI.sessionPanel.Set(string.format(
 					"gain / sec     %s\nsession        %s\nwalk speed     %s\nre-parks       %d",
@@ -2903,7 +2932,7 @@ table.insert(
 				UI.stealPanel.SetNote(S.stealOn and "loop" or "idle")
 			end
 
-			if activeTab == "Status" then
+			if activeTab == "Main" then
 				pcall(buildStatus)
 			end
 
@@ -3070,6 +3099,8 @@ HUB.setAutoSteal = function(state)
 	end
 	if S.stealOn then
 		stealLoop()
+	else
+		S.stealPhase = "idle"
 	end
 end
 HUB.zone = function(index)
@@ -3083,7 +3114,39 @@ HUB.zone = function(index)
 	return false
 end
 HUB.setMinimized = setMinimized
+HUB.setTab = function(name)
+	if not Pages[name] then
+		return false
+	end
+	switchTab(name)
+	return true
+end
+HUB.debug = {
+	insideSafe = function()
+		return insideSafe()
+	end,
+	safeZone = function()
+		local zone = safeZone()
+		return zone and zone.Position or nil
+	end,
+	target = function()
+		local target = findStealTarget()
+		if not target then
+			return nil
+		end
+		return { name = target.object.Name, dist = math.floor(target.dist), prompt = target.prompt.Name }
+	end,
+	releasePose = function()
+		releasePose()
+		return true
+	end,
+	pickupCount = function()
+		local folder = pickupsFolder()
+		return folder and #folder:GetChildren() or -1
+	end,
+}
 
+-- window hygiene: never let it drift off-screen, always stay on top
 table.insert(
 	S.connections,
 	task.spawn(function()
@@ -3103,8 +3166,7 @@ table.insert(
 -- boot: stored profile first, then the default zone card
 applyProfile(Store.profiles[Store.selected])
 minimized = false
-MainScale.Scale = 0.9
-tween(MainScale, Theme.Pop, { Scale = 0.9 })
+tween(MainScale, Theme.Pop, { Scale = 1 })
 ReloadFill.Size = UDim2.new(0, 0, 1, 0)
 ReloadFill.BackgroundTransparency = 0
 local reloadAnim = tween(ReloadFill, Theme.Reload, { Size = UDim2.new(1, 0, 1, 0) })
