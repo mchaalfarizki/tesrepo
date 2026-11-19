@@ -126,8 +126,11 @@ local T = {
 	tabConfig = { "Configs", "Konfig" },
 	tabSet = { "Settings", "Setelan" },
 
-	idle = { "IDLE", "DIAM" },
-	running = { "RUNNING", "JALAN" },
+	idle = { "READY", "SIAP" },
+	running = { "RUN", "JALAN" },
+	noteOn = { "ON", "AKTIF" },
+	noteOff = { "OFF", "MATI" },
+	anyValue = { "ALL", "SEMUA" },
 	activeFmt = { "ACTIVE #%d", "AKTIF #%d" },
 
 	secWindow = { "Window", "Jendela" },
@@ -584,6 +587,10 @@ TelemetryBar.BackgroundTransparency = 0.35
 TelemetryBar.BorderSizePixel = 0
 TelemetryBar.Parent = MainFrame
 
+-- shared ui state (toasts + telemetry refs) stays one local to keep the
+-- executor's 200-register ceiling happy
+local UIX = { order = 0, queue = {}, life = 3.2 }
+
 local Metrics = Instance.new("Frame")
 Metrics.Size = UDim2.new(0.72, -10, 1, -10)
 Metrics.Position = UDim2.fromOffset(10, 5)
@@ -619,10 +626,11 @@ local function metricPill(tag, order, width)
 	return label
 end
 
-local FpsLabel = metricPill("FPS", 1, 66)
-local CpuLabel = metricPill("CPU", 2, 78)
-local GpuLabel = metricPill("GPU", 3, 78)
-local TrpLabel = metricPill("TRP", 4, 78)
+local FpsLabel = metricPill("FPS", 1, 60)
+local CpuLabel = metricPill("CPU", 2, 72)
+local GpuLabel = metricPill("GPU", 3, 72)
+local TrpLabel = metricPill("TRP", 4, 66)
+UIX.pingLabel = metricPill("PING", 5, 66)
 
 local StatusValue = Instance.new("TextLabel")
 StatusValue.Size = UDim2.new(0.28, -14, 1, 0)
@@ -638,8 +646,8 @@ StatusValue.Parent = TelemetryBar
 -- ── floating mini bar (shown when minimized)
 local Mini = Instance.new("Frame")
 Mini.Name = "FloatingMini"
-Mini.Size = UDim2.fromOffset(278, 52)
-Mini.Position = UDim2.new(0.5, -139, 0.06, 0)
+Mini.Size = UDim2.fromOffset(340, 58)
+Mini.Position = UDim2.new(0.5, -170, 0.06, 0)
 Mini.BackgroundColor3 = Theme.BgMain
 Mini.BackgroundTransparency = 0.12
 Mini.BorderSizePixel = 0
@@ -659,14 +667,26 @@ local MiniScale = Instance.new("UIScale")
 MiniScale.Scale = S.uiScale * 0.9
 MiniScale.Parent = Mini
 
+do
+	local MiniAccent = Instance.new("Frame")
+	MiniAccent.Size = UDim2.new(1, -24, 0, 2)
+	MiniAccent.Position = UDim2.fromOffset(12, 0)
+	MiniAccent.BackgroundColor3 = Theme.Accent
+	MiniAccent.BackgroundTransparency = 0.35
+	MiniAccent.BorderSizePixel = 0
+	MiniAccent.Parent = Mini
+	addCorner(MiniAccent, UDim.new(1, 0))
+end
+
 local MiniMetrics = Instance.new("Frame")
-MiniMetrics.Size = UDim2.new(1, -66, 0, 22)
-MiniMetrics.Position = UDim2.fromOffset(8, 6)
+MiniMetrics.Size = UDim2.new(1, -86, 0, 22)
+MiniMetrics.Position = UDim2.fromOffset(10, 8)
 MiniMetrics.BackgroundTransparency = 1
 MiniMetrics.Parent = Mini
 
 local MiniList = Instance.new("UIListLayout")
 MiniList.FillDirection = Enum.FillDirection.Horizontal
+MiniList.VerticalAlignment = Enum.VerticalAlignment.Center
 MiniList.Padding = UDim.new(0, 4)
 MiniList.SortOrder = Enum.SortOrder.LayoutOrder
 MiniList.Parent = MiniMetrics
@@ -689,28 +709,41 @@ local function miniPill(tag, order, width)
 	label.TextColor3 = Theme.TextPrimary
 	label.Font = FONT_BOLD
 	label.TextSize = 10
+	label.TextTruncate = Enum.TextTruncate.AtEnd
 	label.Parent = pill
 	return label
 end
 
-local MiniFps = miniPill("FPS", 1, 56)
-local MiniCpu = miniPill("CPU", 2, 68)
-local MiniGpu = miniPill("GPU", 3, 68)
+local MiniFps = miniPill("FPS", 1, 54)
+local MiniCpu = miniPill("CPU", 2, 64)
+local MiniGpu = miniPill("GPU", 3, 64)
+UIX.miniPing = miniPill("PING", 4, 58)
 
 local MiniStatus = Instance.new("TextLabel")
-MiniStatus.Size = UDim2.new(1, -66, 0, 16)
-MiniStatus.Position = UDim2.fromOffset(10, 30)
+MiniStatus.Size = UDim2.new(1, -86, 0, 16)
+MiniStatus.Position = UDim2.fromOffset(10, 34)
 MiniStatus.BackgroundTransparency = 1
 MiniStatus.Text = L("idle")
-MiniStatus.TextColor3 = Theme.TextPrimary
+MiniStatus.TextColor3 = Theme.TextSecondary
 MiniStatus.TextXAlignment = Enum.TextXAlignment.Left
+MiniStatus.TextTruncate = Enum.TextTruncate.AtEnd
 MiniStatus.Font = FONT_BOLD
 MiniStatus.TextSize = 10
 MiniStatus.Parent = Mini
 
+do
+	local MiniDivider = Instance.new("Frame")
+	MiniDivider.Size = UDim2.fromOffset(1, 34)
+	MiniDivider.Position = UDim2.new(1, -46, 0.5, -17)
+	MiniDivider.BackgroundColor3 = Theme.Stroke
+	MiniDivider.BackgroundTransparency = 0.85
+	MiniDivider.BorderSizePixel = 0
+	MiniDivider.Parent = Mini
+end
+
 local ExpandBtn = Instance.new("TextButton")
-ExpandBtn.Size = UDim2.fromOffset(26, 26)
-ExpandBtn.Position = UDim2.new(1, -34, 0.5, -13)
+ExpandBtn.Size = UDim2.fromOffset(28, 28)
+ExpandBtn.Position = UDim2.new(1, -38, 0.5, -14)
 ExpandBtn.BackgroundColor3 = Theme.BgButtonOn
 ExpandBtn.BackgroundTransparency = 0.2
 ExpandBtn.Text = "+"
@@ -722,48 +755,93 @@ ExpandBtn.Parent = Mini
 addCorner(ExpandBtn, Theme.Pill)
 addStroke(ExpandBtn, 0.85, 1)
 
--- ── toasts (replaces the old WindUI notification layer)
+-- the real mouse pointer is deliberately left visible everywhere, including
+-- inside the hub. hiding it made menus hard to use.
+
+-- ── toasts: one tidy stack, bottom-right, max four, with a life line
 local ToastHolder = Instance.new("Frame")
 ToastHolder.Name = "Toasts"
-ToastHolder.Size = UDim2.fromOffset(268, 260)
-ToastHolder.Position = UDim2.new(1, -282, 1, -272)
+ToastHolder.Size = UDim2.fromOffset(272, 232)
+ToastHolder.Position = UDim2.new(1, -284, 1, -244)
 ToastHolder.BackgroundTransparency = 1
 ToastHolder.ZIndex = 50
 ToastHolder.Parent = ScreenGui
 
-local ToastList = Instance.new("UIListLayout")
-ToastList.VerticalAlignment = Enum.VerticalAlignment.Bottom
-ToastList.Padding = UDim.new(0, 6)
-ToastList.SortOrder = Enum.SortOrder.LayoutOrder
-ToastList.Parent = ToastHolder
+do
+	local ToastList = Instance.new("UIListLayout")
+	ToastList.VerticalAlignment = Enum.VerticalAlignment.Bottom
+	ToastList.HorizontalAlignment = Enum.HorizontalAlignment.Right
+	ToastList.Padding = UDim.new(0, 6)
+	ToastList.SortOrder = Enum.SortOrder.LayoutOrder
+	ToastList.Parent = ToastHolder
+end
 
-local toastOrder = 0
+function UIX.dismissToast(tick)
+	if not tick or not tick.Parent then
+		return
+	end
+	for index, entry in ipairs(UIX.queue) do
+		if entry == tick then
+			table.remove(UIX.queue, index)
+			break
+		end
+	end
+	pcall(function()
+		tween(tick, Theme.Fast, { BackgroundTransparency = 1 })
+		for _, child in ipairs(tick:GetDescendants()) do
+			if child:IsA("TextLabel") then
+				tween(child, Theme.Fast, { TextTransparency = 1 })
+			elseif child:IsA("Frame") then
+				tween(child, Theme.Fast, { BackgroundTransparency = 1 })
+			end
+		end
+		task.delay(0.22, function()
+			pcall(function()
+				tick:Destroy()
+			end)
+		end)
+	end)
+end
+
 local function notify(text, kind)
 	if not alive() then
 		return
 	end
-	toastOrder += 1
+	UIX.order += 1
+
 	local tick = Instance.new("Frame")
-	tick.Size = UDim2.new(1, 0, 0, 40)
+	tick.Size = UDim2.new(1, 0, 0, 44)
 	tick.BackgroundColor3 = Theme.BgCard
-	tick.BackgroundTransparency = 0.08
+	tick.BackgroundTransparency = 0.1
 	tick.BorderSizePixel = 0
-	tick.LayoutOrder = toastOrder
+	tick.LayoutOrder = UIX.order
+	tick.ZIndex = 51
 	tick.Parent = ToastHolder
 	addCorner(tick, Theme.Small)
-	addStroke(tick, 0.82, 1)
+	addStroke(tick, 0.8, 1)
 
+	local tone = kind == "bad" and Theme.Bad or (kind == "good" and Theme.Good or Theme.Accent)
 	local accent = Instance.new("Frame")
-	accent.Size = UDim2.new(0, 3, 1, -12)
-	accent.Position = UDim2.fromOffset(0, 6)
-	accent.BackgroundColor3 = kind == "bad" and Theme.Bad or (kind == "good" and Theme.Good or Theme.Accent)
+	accent.Size = UDim2.new(0, 3, 1, -14)
+	accent.Position = UDim2.fromOffset(0, 7)
+	accent.BackgroundColor3 = tone
 	accent.BorderSizePixel = 0
+	accent.ZIndex = 52
 	accent.Parent = tick
 	addCorner(accent, UDim.new(1, 0))
 
+	local dot = Instance.new("Frame")
+	dot.Size = UDim2.fromOffset(6, 6)
+	dot.Position = UDim2.fromOffset(12, 19)
+	dot.BackgroundColor3 = tone
+	dot.BorderSizePixel = 0
+	dot.ZIndex = 52
+	dot.Parent = tick
+	addCorner(dot, UDim.new(1, 0))
+
 	local label = Instance.new("TextLabel")
-	label.Size = UDim2.new(1, -22, 1, -8)
-	label.Position = UDim2.fromOffset(12, 4)
+	label.Size = UDim2.new(1, -38, 1, -14)
+	label.Position = UDim2.fromOffset(25, 7)
 	label.BackgroundTransparency = 1
 	label.Text = tostring(text)
 	label.TextColor3 = Theme.TextPrimary
@@ -772,24 +850,47 @@ local function notify(text, kind)
 	label.TextWrapped = true
 	label.Font = FONT_BOLD
 	label.TextSize = 11
+	label.ZIndex = 52
 	label.Parent = tick
 
+	local lifeTrack = Instance.new("Frame")
+	lifeTrack.Size = UDim2.new(1, -24, 0, 2)
+	lifeTrack.Position = UDim2.fromOffset(12, 40)
+	lifeTrack.BackgroundColor3 = tone
+	lifeTrack.BackgroundTransparency = 0.7
+	lifeTrack.BorderSizePixel = 0
+	lifeTrack.ZIndex = 52
+	lifeTrack.Parent = tick
+	addCorner(lifeTrack, UDim.new(1, 0))
+
+	local lifeFill = Instance.new("Frame")
+	lifeFill.Size = UDim2.new(1, 0, 1, 0)
+	lifeFill.BackgroundColor3 = tone
+	lifeFill.BackgroundTransparency = 0.15
+	lifeFill.BorderSizePixel = 0
+	lifeFill.ZIndex = 53
+	lifeFill.Parent = lifeTrack
+	addCorner(lifeFill, UDim.new(1, 0))
+
+	tick.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			UIX.dismissToast(tick)
+		end
+	end)
+	table.insert(UIX.queue, tick)
+	if #UIX.queue > 4 then
+		UIX.dismissToast(UIX.queue[1])
+	end
+
 	local pop = Instance.new("UIScale")
-	pop.Scale = 0.92
+	pop.Scale = 0.94
 	pop.Parent = tick
 	tween(pop, Theme.Pop, { Scale = 1 })
-
-	task.delay(2.8, function()
-		pcall(function()
-			tween(tick, Theme.Fast, { BackgroundTransparency = 1 })
-			tween(label, Theme.Fast, { TextTransparency = 1 })
-			tween(accent, Theme.Fast, { BackgroundTransparency = 1 })
-			task.delay(0.25, function()
-				pcall(function()
-					tick:Destroy()
-				end)
-			end)
-		end)
+	tween(lifeFill, TweenInfo.new(UIX.life, Enum.EasingStyle.Linear, Enum.EasingDirection.Out), {
+		Size = UDim2.new(0, 0, 1, 0),
+	})
+	task.delay(UIX.life, function()
+		UIX.dismissToast(tick)
 	end)
 end
 
@@ -905,9 +1006,7 @@ local function setMinimized(state)
 	end
 end
 
-MiniStatus.InputBegan:Connect(function()
-	setMinimized(false)
-end)
+-- the mini bar never auto-expands on hover/click; only the + button does.
 
 -- ============================================================================
 -- 6 · sidebar · pages
@@ -1384,6 +1483,13 @@ local function createButtonCard(parent, titleKey, subKey, bgColor, onClick)
 	return handle
 end
 
+local function dispValue(value)
+	if value == "Any" then
+		return L("anyValue")
+	end
+	return tostring(value)
+end
+
 local function createDropdownCard(parent, titleKey, subKey, values, defaultIndex, onChange)
 	local rowHeight = 24
 	local frame = card(parent, 62)
@@ -1416,7 +1522,7 @@ local function createDropdownCard(parent, titleKey, subKey, values, defaultIndex
 	selector.Position = UDim2.new(1, -180, 0.5, -14)
 	selector.BackgroundColor3 = Theme.BgInput
 	selector.BackgroundTransparency = 0.2
-	selector.Text = tostring(values[defaultIndex] or values[1] or "-")
+	selector.Text = dispValue(values[defaultIndex] or values[1] or "-")
 	selector.TextColor3 = Theme.TextPrimary
 	selector.TextXAlignment = Enum.TextXAlignment.Left
 	selector.Font = FONT_BOLD
@@ -1486,7 +1592,7 @@ local function createDropdownCard(parent, titleKey, subKey, values, defaultIndex
 			row.Position = UDim2.fromOffset(4, 0)
 			row.BackgroundColor3 = index == handle.Index and Theme.BgCardActive or Theme.BgInput
 			row.BackgroundTransparency = index == handle.Index and 0.1 or 1
-			row.Text = "  " .. tostring(value)
+			row.Text = "  " .. dispValue(value)
 			row.TextColor3 = index == handle.Index and Theme.Accent or Theme.TextPrimary
 			row.TextXAlignment = Enum.TextXAlignment.Left
 			row.Font = FONT_BOLD
@@ -1499,7 +1605,7 @@ local function createDropdownCard(parent, titleKey, subKey, values, defaultIndex
 			row.MouseButton1Click:Connect(function()
 				handle.Index = index
 				handle.Value = value
-				selector.Text = tostring(value)
+				selector.Text = dispValue(value)
 				buildRows()
 				setOpen(false)
 				if onChange then
@@ -1530,7 +1636,7 @@ local function createDropdownCard(parent, titleKey, subKey, values, defaultIndex
 		rowButtons = {}
 		handle.Index = index or 1
 		handle.Value = values[handle.Index]
-		selector.Text = tostring(handle.Value or "-")
+		selector.Text = dispValue(handle.Value or "-")
 		if open then
 			buildRows()
 			setOpen(true)
@@ -1686,15 +1792,8 @@ end
 -- gameplay requests go straight to the server, no focused window and no mouse needed
 -- time-based and far above the game client's own small counter; avoids Replay rejects
 local nextRequestId = os.time() * 1000 + math.random(1000, 999999)
--- inventory has its own small sequential RequestId counter (the gameplay one is
--- time-based to dodge Replay rejects, but SlashInventory ignores huge ids)
-local invRequestId = 100
-local function nextInvRequestId()
-	-- SlashInventory rejects any id it has already seen with Code=Replay, and a
-	-- plain counter can collide with the client's own counter across rejoins
-	invRequestId = math.random(200000000, 999000000)
-	return invRequestId
-end
+-- inventory requests are intentionally never sent by the hub: raising the server's
+-- RequestId high-water mark breaks the client's own sword clicks (Code=Replay).
 local function sendGameRequest(operation, args)
 	local folder = ReplicatedStorage:FindFirstChild("SlashGameplay")
 	local event = folder and folder:FindFirstChild("Request")
@@ -2946,67 +3045,16 @@ local function weaponStats()
 	}
 end
 
--- use the game's own inventory Request with Operation="Equip" -- the exact path
--- the real client uses. the EquipRequest bindable only toggles and gets stuck when
--- a pet tool is selected. accepts a Tool instance or a raw UID string.
+-- HUB NEVER FIRES AN INVENTORY Equip REQUEST.
+-- the server keeps a high-water mark for RequestId. any id we send (even once)
+-- pushes that mark above the game client's own small counter, so every later
+-- click on a sword is answered Code=Replay ("that request was already handled").
+-- the server already tracks the selected sword in the snapshot (Selection.UID)
+-- and SlashAuto swings it without a client Tool, so we only observe and never
+-- touch the inventory Request remote. keep this function as a no-op checker so
+-- old call sites stay silent by design.
 local function equipGameSlot(source)
-	local uid = type(source) == "string" and source
-		or (source and (source:GetAttribute("SlashItemUID") or source:GetAttribute("UID")))
-	if not uid then
-		return false
-	end
-	uid = tostring(uid)
-	-- never re-send Equip for something already held: the game treats a repeat
-	-- as Unequip and answers Code=Replay ("already handled") on every cycle
-	local heldChar = LocalPlayer.Character
-	if heldChar then
-		for _, candidate in ipairs(heldChar:GetChildren()) do
-			if candidate:IsA("Tool")
-				and tostring(candidate:GetAttribute("SlashItemUID") or candidate:GetAttribute("UID")) == uid then
-				return true
-			end
-		end
-	end
-	local folder = ReplicatedStorage:FindFirstChild("SlashInventory")
-	local remotes = folder and folder:FindFirstChild("Remotes")
-	local request = remotes and remotes:FindFirstChild("Request")
-	local getter = remotes and remotes:FindFirstChild("GetSnapshot")
-	if not (request and getter) then
-		return false
-	end
-	local ok, result = pcall(getter.InvokeServer, getter)
-	local snapshot = ok and result and result.Snapshot or nil
-	local revision = snapshot and tonumber(snapshot.Revision) or 0
-	if snapshot and snapshot.Equipment then
-		local held = tostring(snapshot.Equipment.HeldUID or "")
-		if held ~= "" and held ~= "nil" and held == uid then
-			return true
-		end
-	end
-	if snapshot and snapshot.Selection then
-		local sel = tostring(snapshot.Selection.UID or "")
-		if sel ~= "" and sel ~= "nil" and sel == uid then
-			return true
-		end
-	end
-	local reqId = nextInvRequestId()
-	pcall(request.FireServer, request, {
-		RequestId = reqId,
-		ExpectedRevision = revision,
-		Operation = "Equip",
-		Args = { UID = uid },
-	})
-	task.wait(0.55)
-	local char = LocalPlayer.Character
-	if char then
-		for _, candidate in ipairs(char:GetChildren()) do
-			if candidate:IsA("Tool")
-				and tostring(candidate:GetAttribute("SlashItemUID") or candidate:GetAttribute("UID")) == tostring(uid) then
-				return true
-			end
-		end
-	end
-	return false
+	return true
 end
 
 -- strongest sword definition id -> damage, used to pick from the server inventory
@@ -3068,23 +3116,15 @@ local function ensureWeapon()
 		-- the real swords live in the server inventory snapshot
 		local uid, damage, name = strongestSwordUid()
 		if uid and damage > 0 then
-			-- equip once in the background. equipGameSlot now short-circuits when
-			-- the sword is already held or the server says it is selected, so a
-			-- repeated cycle can no longer toggle it off or spam Replay toasts
-			task.spawn(function()
-				pcall(equipGameSlot, uid)
-			end)
+			-- server-side Selection is enough: SlashAuto swings it without a
+			-- client Tool. never fire inventory Equip here (see equipGameSlot).
 			return true, "siap server · " .. tostring(name or uid)
 		end
 		return false, "no weapon"
 	end
-	equipGameSlot(best)
-	char = LocalPlayer.Character
-	tool = char and char:FindFirstChildOfClass("Tool")
-	if not tool then
-		return false, "equip gagal"
-	end
-	return true, "equip · " .. tostring(best.Name)
+	-- a Tool in the backpack is also enough; clicking it in the game's own
+	-- inventory is what equips it, and the server snapshot already knows it.
+	return true, "siap · " .. tostring(best.Name)
 end
 
 local function swordSuggestion(hp, swing)
@@ -4647,12 +4687,12 @@ table.insert(
 
 			if UI.stealPanel then
 				UI.stealPanel.Set(stealPanelText())
-				UI.stealPanel.SetNote(S.stealOn and "loop" or "idle")
+				UI.stealPanel.SetNote(L(S.stealOn and "noteOn" or "noteOff"))
 			end
 
 			if UI.breakPanel then
 				UI.breakPanel.Set(S.Break.panel())
-				UI.breakPanel.SetNote(S.breakOn and "loop" or "idle")
+				UI.breakPanel.SetNote(L(S.breakOn and "noteOn" or "noteOff"))
 			end
 
 			pcall(function()
@@ -4660,7 +4700,7 @@ table.insert(
 			end)
 			if UI.skillPanel then
 				UI.skillPanel.Set(S.Skill.panel())
-				UI.skillPanel.SetNote(S.autoSkill and "live" or "idle")
+				UI.skillPanel.SetNote(L(S.autoSkill and "noteOn" or "noteOff"))
 			end
 
 			if activeTab == "Main" then
@@ -4691,6 +4731,12 @@ end
 
 do
 	local frames, elapsed = 0, 0
+
+	local function pingMs()
+		local value = perfMs("Ping")
+		return value and math.max(0, math.floor(value)) or 0
+	end
+
 	table.insert(
 		S.connections,
 		RunService.RenderStepped:Connect(function(dt)
@@ -4726,8 +4772,16 @@ do
 			GpuLabel.Text = string.format("GPU %.1fms", gpu)
 			GpuLabel.TextColor3 = gpuColor
 			MiniGpu.Text = GpuLabel.Text
-			TrpLabel.Text = string.format("TRP %d%%", math.floor((S.opacity or 0) * 100 + 0.5))
 			MiniGpu.TextColor3 = gpuColor
+
+			TrpLabel.Text = string.format("TRP %d%%", math.floor((S.opacity or 0) * 100 + 0.5))
+
+			local ping = pingMs()
+			local pingColor = ping <= 80 and Theme.Good or (ping <= 150 and Theme.Warn or Theme.Bad)
+			UIX.pingLabel.Text = string.format("PING %d", ping)
+			UIX.pingLabel.TextColor3 = pingColor
+			UIX.miniPing.Text = UIX.pingLabel.Text
+			UIX.miniPing.TextColor3 = pingColor
 		end)
 	)
 end
@@ -4772,6 +4826,10 @@ local function cleanup()
 	S.destroyed = true
 	S.stealOn = false
 	S.treadmillOn = false
+
+	pcall(function()
+		UserInputService.MouseIconEnabled = true
+	end)
 
 	for _, connection in ipairs(S.connections) do
 		pcall(function()
@@ -4988,6 +5046,20 @@ table.insert(
 				return
 			end
 			pcall(clampWindow)
+			pcall(function()
+				local camera = workspace.CurrentCamera
+				if not camera or not Mini.Visible then
+					return
+				end
+				local viewport = camera.ViewportSize
+				local size = Mini.AbsoluteSize
+				local pos = Mini.AbsolutePosition
+				local x = math.clamp(pos.X, 0, math.max(0, viewport.X - size.X))
+				local y = math.clamp(pos.Y, 0, math.max(0, viewport.Y - size.Y))
+				if math.abs(x - pos.X) > 1 or math.abs(y - pos.Y) > 1 then
+					Mini.Position = UDim2.fromOffset(x, y)
+				end
+			end)
 			if ScreenGui.DisplayOrder ~= 2147483647 then
 				ScreenGui.DisplayOrder = 2147483647
 			end
@@ -4995,20 +5067,175 @@ table.insert(
 	end)
 )
 
+-- ── final tidy pass: even out anything the widget builders left ragged
+do
+	local function tidyPass()
+		for _, inst in ipairs(ScreenGui:GetDescendants()) do
+			if inst:IsA("TextLabel") or inst:IsA("TextButton") then
+				if not inst.TextWrapped and inst.TextTruncate == Enum.TextTruncate.None then
+					inst.TextTruncate = Enum.TextTruncate.AtEnd
+				end
+				if inst.Size.Y.Offset > 0 and inst.Size.Y.Offset <= 24 then
+					inst.TextYAlignment = Enum.TextYAlignment.Center
+				end
+			elseif inst:IsA("ScrollingFrame") then
+				inst.ScrollBarThickness = 3
+				inst.ScrollBarImageTransparency = 0.35
+			end
+		end
+	end
+
+	fontPass()
+	roundPass()
+	tidyPass()
+end
+
 -- boot: stored profile first, then the default zone card
-fontPass()
-roundPass()
+pcall(function()
+	UserInputService.MouseIconEnabled = true
+end)
 captureOpacity()
 applyOpacity()
 applyProfile(Store.profiles[Store.selected])
 minimized = false
-tween(MainScale, Theme.Pop, { Scale = S.uiScale })
-ReloadFill.Size = UDim2.new(0, 0, 1, 0)
-ReloadFill.BackgroundTransparency = 0
-local reloadAnim = tween(ReloadFill, Theme.Reload, { Size = UDim2.new(1, 0, 1, 0) })
-reloadAnim.Completed:Connect(function()
-	tween(ReloadFill, Theme.Fast, { BackgroundTransparency = 1 })
+
+-- ── execute splash: the window only appears once everything is mounted
+do
+MainFrame.Visible = false
+Mini.Visible = false
+ToastHolder.Visible = false
+
+local Boot = Instance.new("Frame")
+Boot.Name = "Boot"
+Boot.Size = UDim2.fromScale(1, 1)
+Boot.BackgroundColor3 = Color3.fromRGB(8, 10, 15)
+Boot.BackgroundTransparency = 0.32
+Boot.BorderSizePixel = 0
+Boot.ZIndex = 100
+Boot.Parent = ScreenGui
+
+local BootCard = Instance.new("Frame")
+BootCard.Size = UDim2.fromOffset(324, 136)
+BootCard.Position = UDim2.new(0.5, -162, 0.5, -68)
+BootCard.BackgroundColor3 = Theme.BgCard
+BootCard.BackgroundTransparency = 0.1
+BootCard.BorderSizePixel = 0
+BootCard.ZIndex = 101
+BootCard.Parent = Boot
+addCorner(BootCard, Theme.Small)
+addStroke(BootCard, 0.8, 1)
+
+local BootGlow = Instance.new("Frame")
+BootGlow.Size = UDim2.new(1, -28, 0, 2)
+BootGlow.Position = UDim2.fromOffset(14, 0)
+BootGlow.BackgroundColor3 = Theme.Accent
+BootGlow.BackgroundTransparency = 0.25
+BootGlow.BorderSizePixel = 0
+BootGlow.ZIndex = 102
+BootGlow.Parent = BootCard
+addCorner(BootGlow, UDim.new(1, 0))
+
+local BootTitle = Instance.new("TextLabel")
+BootTitle.Size = UDim2.new(1, -28, 0, 22)
+BootTitle.Position = UDim2.fromOffset(14, 20)
+BootTitle.BackgroundTransparency = 1
+BootTitle.Text = "ELENA // SWORDS vs EGGS"
+BootTitle.TextColor3 = Theme.TextPrimary
+BootTitle.TextXAlignment = Enum.TextXAlignment.Left
+BootTitle.Font = FONT_BOLD
+BootTitle.TextSize = 14
+BootTitle.ZIndex = 102
+BootTitle.Parent = BootCard
+
+local BootStep = Instance.new("TextLabel")
+BootStep.Size = UDim2.new(1, -28, 0, 18)
+BootStep.Position = UDim2.fromOffset(14, 48)
+BootStep.BackgroundTransparency = 1
+BootStep.Text = "menyiapkan modul..."
+BootStep.TextColor3 = Theme.TextSecondary
+BootStep.TextXAlignment = Enum.TextXAlignment.Left
+BootStep.Font = FONT_BOLD
+BootStep.TextSize = 11
+BootStep.ZIndex = 102
+BootStep.Parent = BootCard
+
+local BootTrack = Instance.new("Frame")
+BootTrack.Size = UDim2.new(1, -28, 0, 3)
+BootTrack.Position = UDim2.fromOffset(14, 82)
+BootTrack.BackgroundColor3 = Theme.Stroke
+BootTrack.BackgroundTransparency = 0.88
+BootTrack.BorderSizePixel = 0
+BootTrack.ZIndex = 102
+BootTrack.Parent = BootCard
+addCorner(BootTrack, UDim.new(1, 0))
+
+local BootFill = Instance.new("Frame")
+BootFill.Size = UDim2.new(0, 0, 1, 0)
+BootFill.BackgroundColor3 = Theme.Accent
+BootFill.BackgroundTransparency = 0.1
+BootFill.BorderSizePixel = 0
+BootFill.ZIndex = 103
+BootFill.Parent = BootTrack
+addCorner(BootFill, UDim.new(1, 0))
+
+local BootHint = Instance.new("TextLabel")
+BootHint.Size = UDim2.new(1, -28, 0, 14)
+BootHint.Position = UDim2.fromOffset(14, 98)
+BootHint.BackgroundTransparency = 1
+BootHint.Text = "menyiapkan ui · sebentar"
+BootHint.TextColor3 = Theme.TextSecondary
+BootHint.TextXAlignment = Enum.TextXAlignment.Left
+BootHint.Font = FONT_BOLD
+BootHint.TextSize = 9
+BootHint.ZIndex = 102
+BootHint.Parent = BootCard
+
+task.spawn(function()
+	local steps = { "menyiapkan modul...", "memasang panel...", "siap" }
+	for index, step in ipairs(steps) do
+		if not alive() then
+			return
+		end
+		BootStep.Text = step
+		tween(BootFill, TweenInfo.new(0.24, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+			Size = UDim2.new(index / #steps, 0, 1, 0),
+		})
+		task.wait(0.26)
+	end
+	if not alive() then
+		return
+	end
+
+	tween(BootCard, Theme.Fast, { BackgroundTransparency = 1 })
+	for _, child in ipairs(BootCard:GetDescendants()) do
+		if child:IsA("TextLabel") then
+			tween(child, Theme.Fast, { TextTransparency = 1 })
+		elseif child:IsA("Frame") then
+			tween(child, Theme.Fast, { BackgroundTransparency = 1 })
+		end
+	end
+	tween(Boot, Theme.Fast, { BackgroundTransparency = 1 })
+	task.wait(0.24)
+	if not alive() then
+		return
+	end
+	Boot:Destroy()
+
+	MainFrame.Visible = true
+	ToastHolder.Visible = true
+	MainScale.Scale = S.uiScale * 0.96
+	tween(MainScale, Theme.Pop, { Scale = S.uiScale })
+
+	ReloadFill.Size = UDim2.new(0, 0, 1, 0)
+	ReloadFill.BackgroundTransparency = 0
+	local reloadAnim = tween(ReloadFill, Theme.Reload, { Size = UDim2.new(1, 0, 1, 0) })
+	reloadAnim.Completed:Connect(function()
+		tween(ReloadFill, Theme.Fast, { BackgroundTransparency = 1 })
+	end)
+
+	notify(IS_RELOAD and "hub reloaded · run " .. tostring(HUB.runs) or "elena hub loaded", "good")
 end)
+end
 
 task.spawn(function()
 	task.wait(1)
@@ -5034,5 +5261,3 @@ task.spawn(function()
 	pcall(buildStatus)
 	pcall(syncStatus)
 end)
-
-notify(IS_RELOAD and "hub reloaded · run " .. tostring(HUB.runs) or "elena hub loaded", "good")
