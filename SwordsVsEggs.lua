@@ -52,6 +52,9 @@ end
 
 HUB.runId = RUN_ID
 HUB.runs = (tonumber(HUB.runs) or 0) + 1
+if not IS_RELOAD then
+	HUB.baseSpeed = 16
+end
 HUB.cleanup = nil
 
 local function alive()
@@ -70,6 +73,8 @@ local MAX_HISTORY = 12
 
 local CONFIG_DIR = "ElenaHub"
 local CONFIG_FILE = CONFIG_DIR .. "/configs.json"
+
+local FONT_BOLD = Enum.Font.SourceSansBold
 
 local Theme = {
 	WindowSize = UDim2.fromOffset(560, 392),
@@ -99,9 +104,9 @@ local Theme = {
 	Warn = Color3.fromRGB(250, 204, 21),
 	Bad = Color3.fromRGB(248, 113, 113),
 
-	Corner = UDim.new(0, 12),
-	Small = UDim.new(0, 8),
-	Pill = UDim.new(0, 6),
+	Corner = UDim.new(0, 18),
+	Small = UDim.new(0, 12),
+	Pill = UDim.new(1, 0),
 
 	Fast = TweenInfo.new(0.18, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
 	TabAnim = TweenInfo.new(0.24, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
@@ -155,6 +160,16 @@ local T = {
 	stealDelaySub = { "seconds between attempts", "detik antar percobaan" },
 	stealOnce = { "Steal once", "Steal sekali" },
 	stealOnceSub = { "one pass, then stop", "sekali jalan lalu stop" },
+	minRarity = { "Minimum rarity", "Rarity minimum" },
+	minRaritySub = { "only steal at or above this tier", "steal hanya dari rarity ini ke atas" },
+	minValue = { "Minimum value", "Nilai minimum" },
+	minValueSub = { "pet cash per second must reach this", "cash per detik pet harus sampai sini" },
+	secStealFilter = { "Steal filter", "Filter steal" },
+	secIndex = { "Pet index · all maps", "Index pet · semua map" },
+	idxZone = { "Map filter", "Filter map" },
+	idxZoneSub = { "show every zone or one", "tampilkan semua atau satu" },
+	idxTitle = { "PET · RARITY · EGG · ODDS", "PET · RARITY · EGG · ODDS" },
+	idxAll = { "All maps", "Semua map" },
 	stealInfo = { "Steal engine", "Mesin steal" },
 
 	secGuard = { "Protection", "Proteksi" },
@@ -196,6 +211,8 @@ local T = {
 	langSub = { "switch every label instantly", "ganti semua label langsung" },
 	uiScale = { "UI scale", "Skala UI" },
 	uiScaleSub = { "shrink or grow the whole window", "kecilkan atau besarkan jendela" },
+	uiOpacity = { "Transparency", "Transparansi" },
+	uiOpacitySub = { "how see-through the hub is", "seberapa tembus pandang hub" },
 	secDanger = { "Session", "Sesi" },
 	closeHub = { "Close hub", "Tutup hub" },
 	closeHubSub = { "destroys this run completely", "hancurkan run ini sepenuhnya" },
@@ -218,8 +235,9 @@ local S = {
 	instance = RUN_ID,
 	lang = LANG,
 
-	speedOn = false,
+	speedOn = true,
 	speedValue = 180,
+	baseSpeed = 16,
 	treadmillOn = false,
 	leaving = false,
 	parking = false,
@@ -241,6 +259,10 @@ local S = {
 	stealWorld = 0,
 
 	zone = nil,
+	uiScale = 0.7,
+	opacity = 0,
+	minRarity = "Common",
+	minValue = 0,
 	ownedPets = {},
 	ownedKinds = {},
 	ownedCount = 0,
@@ -260,7 +282,7 @@ local S = {
 
 local DEFAULT_PROFILE = {
 	SpeedValue = 180,
-	SpeedOn = false,
+	SpeedOn = true,
 	Treadmill = false,
 	AntiAfk = true,
 	AntiRag = true,
@@ -270,6 +292,8 @@ local DEFAULT_PROFILE = {
 
 local Store = {
 	language = "id",
+	uiScale = 0.7,
+	opacity = 0,
 	selected = "default",
 	profiles = { default = table.clone(DEFAULT_PROFILE) },
 	history = {},
@@ -334,6 +358,8 @@ if not Store.profiles[Store.selected] then
 end
 LANG = Store.language == "en" and 1 or 2
 S.lang = LANG
+S.uiScale = math.clamp(tonumber(Store.uiScale) or 0.7, 0.7, 1.3)
+S.opacity = math.clamp(tonumber(Store.opacity) or 0, 0, 0.75)
 
 -- ============================================================================
 -- 4 · ui primitives
@@ -432,16 +458,15 @@ MainFrame.ClipsDescendants = true
 MainFrame.Active = true
 MainFrame.Parent = ScreenGui
 addCorner(MainFrame, Theme.Corner)
-addStroke(MainFrame, Theme.StrokeAlpha, 1)
 
 local MainScale = Instance.new("UIScale")
-MainScale.Scale = 0.94
+MainScale.Scale = S.uiScale
 MainScale.Parent = MainFrame
 
 local MainGradient = Instance.new("UIGradient")
 MainGradient.Color = ColorSequence.new({
-	ColorSequenceKeypoint.new(0, Color3.fromRGB(30, 35, 48)),
-	ColorSequenceKeypoint.new(1, Color3.fromRGB(12, 14, 20)),
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(24, 28, 38)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(18, 21, 28)),
 })
 MainGradient.Rotation = 135
 MainGradient.Parent = MainFrame
@@ -475,7 +500,7 @@ TitleLabel.BackgroundTransparency = 1
 TitleLabel.Text = "ELENA // SWORDS vs EGGS"
 TitleLabel.TextColor3 = Theme.TextPrimary
 TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
-TitleLabel.Font = Enum.Font.GothamBold
+TitleLabel.Font = FONT_BOLD
 TitleLabel.TextSize = 14
 TitleLabel.Parent = TopBar
 
@@ -486,7 +511,7 @@ SubLabel.BackgroundTransparency = 1
 SubLabel.Text = L("subTag")
 SubLabel.TextColor3 = Theme.TextSecondary
 SubLabel.TextXAlignment = Enum.TextXAlignment.Right
-SubLabel.Font = Enum.Font.GothamMedium
+SubLabel.Font = FONT_BOLD
 SubLabel.TextSize = 11
 SubLabel.Parent = TopBar
 
@@ -498,7 +523,7 @@ local function windowButton(text, xOffset, bg)
 	btn.BackgroundTransparency = 0.25
 	btn.Text = text
 	btn.TextColor3 = Theme.TextPrimary
-	btn.Font = Enum.Font.GothamBold
+	btn.Font = FONT_BOLD
 	btn.TextSize = text == "×" and 16 or 15
 	btn.AutoButtonColor = false
 	btn.Parent = TopBar
@@ -549,7 +574,7 @@ local function metricPill(tag, order, width)
 	label.BackgroundTransparency = 1
 	label.Text = tag .. " --"
 	label.TextColor3 = Theme.TextPrimary
-	label.Font = Enum.Font.GothamSemibold
+	label.Font = FONT_BOLD
 	label.TextSize = 11
 	label.Parent = pill
 	return label
@@ -558,6 +583,7 @@ end
 local FpsLabel = metricPill("FPS", 1, 66)
 local CpuLabel = metricPill("CPU", 2, 78)
 local GpuLabel = metricPill("GPU", 3, 78)
+local TrpLabel = metricPill("TRP", 4, 78)
 
 local StatusValue = Instance.new("TextLabel")
 StatusValue.Size = UDim2.new(0.28, -14, 1, 0)
@@ -566,7 +592,7 @@ StatusValue.BackgroundTransparency = 1
 StatusValue.Text = L("idle")
 StatusValue.TextColor3 = Theme.TextPrimary
 StatusValue.TextXAlignment = Enum.TextXAlignment.Right
-StatusValue.Font = Enum.Font.GothamBold
+StatusValue.Font = FONT_BOLD
 StatusValue.TextSize = 11
 StatusValue.Parent = TelemetryBar
 
@@ -591,7 +617,7 @@ MiniGradient.Rotation = 135
 MiniGradient.Parent = Mini
 
 local MiniScale = Instance.new("UIScale")
-MiniScale.Scale = 0.9
+MiniScale.Scale = S.uiScale * 0.9
 MiniScale.Parent = Mini
 
 local MiniMetrics = Instance.new("Frame")
@@ -622,7 +648,7 @@ local function miniPill(tag, order, width)
 	label.BackgroundTransparency = 1
 	label.Text = tag .. " --"
 	label.TextColor3 = Theme.TextPrimary
-	label.Font = Enum.Font.GothamSemibold
+	label.Font = FONT_BOLD
 	label.TextSize = 10
 	label.Parent = pill
 	return label
@@ -639,7 +665,7 @@ MiniStatus.BackgroundTransparency = 1
 MiniStatus.Text = L("idle")
 MiniStatus.TextColor3 = Theme.TextPrimary
 MiniStatus.TextXAlignment = Enum.TextXAlignment.Left
-MiniStatus.Font = Enum.Font.GothamBold
+MiniStatus.Font = FONT_BOLD
 MiniStatus.TextSize = 10
 MiniStatus.Parent = Mini
 
@@ -650,7 +676,7 @@ ExpandBtn.BackgroundColor3 = Theme.BgButtonOn
 ExpandBtn.BackgroundTransparency = 0.2
 ExpandBtn.Text = "+"
 ExpandBtn.TextColor3 = Theme.TextPrimary
-ExpandBtn.Font = Enum.Font.GothamBold
+ExpandBtn.Font = FONT_BOLD
 ExpandBtn.TextSize = 15
 ExpandBtn.AutoButtonColor = false
 ExpandBtn.Parent = Mini
@@ -694,6 +720,7 @@ local function notify(text, kind)
 	accent.BackgroundColor3 = kind == "bad" and Theme.Bad or (kind == "good" and Theme.Good or Theme.Accent)
 	accent.BorderSizePixel = 0
 	accent.Parent = tick
+	addCorner(accent, UDim.new(1, 0))
 
 	local label = Instance.new("TextLabel")
 	label.Size = UDim2.new(1, -22, 1, -8)
@@ -704,7 +731,7 @@ local function notify(text, kind)
 	label.TextXAlignment = Enum.TextXAlignment.Left
 	label.TextYAlignment = Enum.TextYAlignment.Center
 	label.TextWrapped = true
-	label.Font = Enum.Font.GothamMedium
+	label.Font = FONT_BOLD
 	label.TextSize = 11
 	label.Parent = tick
 
@@ -817,23 +844,23 @@ local minimized = false
 local function setMinimized(state)
 	minimized = state
 	if state then
-		local shrink = tween(MainScale, Theme.Fast, { Scale = 0.92 })
+		local shrink = tween(MainScale, Theme.Fast, { Scale = S.uiScale * 0.94 })
 		shrink.Completed:Connect(function()
 			if minimized then
 				MainFrame.Visible = false
 				Mini.Visible = true
-				MiniScale.Scale = 0.88
-				tween(MiniScale, Theme.Pop, { Scale = 1 })
+				MiniScale.Scale = S.uiScale * 0.92
+				tween(MiniScale, Theme.Pop, { Scale = S.uiScale * 1.05 })
 			end
 		end)
 	else
-		local shrink = tween(MiniScale, Theme.Fast, { Scale = 0.86 })
+		local shrink = tween(MiniScale, Theme.Fast, { Scale = S.uiScale * 0.9 })
 		shrink.Completed:Connect(function()
 			if not minimized then
 				Mini.Visible = false
 				MainFrame.Visible = true
-				MainScale.Scale = 0.94
-				tween(MainScale, Theme.Pop, { Scale = 1 })
+				MainScale.Scale = S.uiScale * 0.94
+				tween(MainScale, Theme.Pop, { Scale = S.uiScale })
 			end
 		end)
 	end
@@ -926,7 +953,7 @@ local function createTabButton(key, labelKey, order)
 	btn.BackgroundTransparency = key == activeTab and 0.25 or 0.55
 	btn.Text = L(labelKey)
 	btn.TextColor3 = key == activeTab and Theme.TextPrimary or Theme.TextSecondary
-	btn.Font = Enum.Font.GothamSemibold
+	btn.Font = FONT_BOLD
 	btn.TextSize = 12
 	btn.AutoButtonColor = false
 	btn.Parent = Sidebar
@@ -991,6 +1018,7 @@ local function card(parent, height)
 	frame.Size = UDim2.new(1, -4, 0, height)
 	frame.BackgroundColor3 = Theme.BgCard
 	frame.BackgroundTransparency = Theme.BgCardAlpha
+	frame:SetAttribute("baseBg", Theme.BgCardAlpha)
 	frame.BorderSizePixel = 0
 	frame.Parent = parent
 	addCorner(frame, Theme.Small)
@@ -1020,7 +1048,7 @@ local function createSection(parent, key)
 	label.Text = string.upper(L(key))
 	label.TextColor3 = Theme.TextSecondary
 	label.TextXAlignment = Enum.TextXAlignment.Left
-	label.Font = Enum.Font.GothamBold
+	label.Font = FONT_BOLD
 	label.TextSize = 11
 	label.Parent = holder
 	label:SetAttribute("i18nKey", key)
@@ -1039,7 +1067,7 @@ local function createToggleCard(parent, titleKey, subKey, defaultState, onChange
 	title.Text = L(titleKey)
 	title.TextColor3 = Theme.TextPrimary
 	title.TextXAlignment = Enum.TextXAlignment.Left
-	title.Font = Enum.Font.GothamSemibold
+	title.Font = FONT_BOLD
 	title.TextSize = 13
 	title.Parent = frame
 
@@ -1050,7 +1078,7 @@ local function createToggleCard(parent, titleKey, subKey, defaultState, onChange
 	sub.Text = L(subKey)
 	sub.TextColor3 = Theme.TextSecondary
 	sub.TextXAlignment = Enum.TextXAlignment.Left
-	sub.Font = Enum.Font.Gotham
+	sub.Font = FONT_BOLD
 	sub.TextSize = 11
 	sub.Parent = frame
 
@@ -1112,7 +1140,7 @@ local function createToggleCard(parent, titleKey, subKey, defaultState, onChange
 	return handle
 end
 
-local function createSliderCard(parent, titleKey, subKey, min, max, default, step, onChange)
+local function createSliderCard(parent, titleKey, subKey, min, max, default, step, onChange, formatValue)
 	local frame = card(parent, 62)
 
 	local title = Instance.new("TextLabel")
@@ -1122,7 +1150,7 @@ local function createSliderCard(parent, titleKey, subKey, min, max, default, ste
 	title.Text = L(titleKey)
 	title.TextColor3 = Theme.TextPrimary
 	title.TextXAlignment = Enum.TextXAlignment.Left
-	title.Font = Enum.Font.GothamSemibold
+	title.Font = FONT_BOLD
 	title.TextSize = 13
 	title.Parent = frame
 
@@ -1133,7 +1161,7 @@ local function createSliderCard(parent, titleKey, subKey, min, max, default, ste
 	sub.Text = L(subKey)
 	sub.TextColor3 = Theme.TextSecondary
 	sub.TextXAlignment = Enum.TextXAlignment.Left
-	sub.Font = Enum.Font.Gotham
+	sub.Font = FONT_BOLD
 	sub.TextSize = 11
 	sub.Parent = frame
 
@@ -1141,10 +1169,10 @@ local function createSliderCard(parent, titleKey, subKey, min, max, default, ste
 	valueLabel.Size = UDim2.new(0, 92, 0, 20)
 	valueLabel.Position = UDim2.new(1, -104, 0, 10)
 	valueLabel.BackgroundTransparency = 1
-	valueLabel.Text = tostring(default)
+	valueLabel.Text = formatValue and formatValue(default) or tostring(default)
 	valueLabel.TextColor3 = Theme.Accent
 	valueLabel.TextXAlignment = Enum.TextXAlignment.Right
-	valueLabel.Font = Enum.Font.GothamBold
+	valueLabel.Font = FONT_BOLD
 	valueLabel.TextSize = 13
 	valueLabel.Parent = frame
 
@@ -1184,7 +1212,7 @@ local function createSliderCard(parent, titleKey, subKey, min, max, default, ste
 		end
 		fill.Size = UDim2.fromScale(alpha, 1)
 		knob.Position = UDim2.new(alpha, 0, 0.5, 0)
-		valueLabel.Text = tostring(value)
+		valueLabel.Text = formatValue and formatValue(value) or tostring(value)
 	end
 
 	local function commit(value)
@@ -1273,7 +1301,7 @@ local function createButtonCard(parent, titleKey, subKey, bgColor, onClick)
 	title.Text = L(titleKey)
 	title.TextColor3 = Theme.TextPrimary
 	title.TextXAlignment = Enum.TextXAlignment.Left
-	title.Font = Enum.Font.GothamSemibold
+	title.Font = FONT_BOLD
 	title.TextSize = 13
 	title.Parent = frame
 
@@ -1284,7 +1312,7 @@ local function createButtonCard(parent, titleKey, subKey, bgColor, onClick)
 	sub.Text = L(subKey)
 	sub.TextColor3 = Theme.TextSecondary
 	sub.TextXAlignment = Enum.TextXAlignment.Left
-	sub.Font = Enum.Font.Gotham
+	sub.Font = FONT_BOLD
 	sub.TextSize = 11
 	sub.Parent = frame
 
@@ -1294,7 +1322,7 @@ local function createButtonCard(parent, titleKey, subKey, bgColor, onClick)
 	arrow.BackgroundTransparency = 1
 	arrow.Text = ">"
 	arrow.TextColor3 = Theme.Accent
-	arrow.Font = Enum.Font.GothamBold
+	arrow.Font = FONT_BOLD
 	arrow.TextSize = 13
 	arrow.Parent = frame
 
@@ -1329,7 +1357,7 @@ local function createDropdownCard(parent, titleKey, subKey, values, defaultIndex
 	title.Text = L(titleKey)
 	title.TextColor3 = Theme.TextPrimary
 	title.TextXAlignment = Enum.TextXAlignment.Left
-	title.Font = Enum.Font.GothamSemibold
+	title.Font = FONT_BOLD
 	title.TextSize = 13
 	title.Parent = frame
 
@@ -1340,7 +1368,7 @@ local function createDropdownCard(parent, titleKey, subKey, values, defaultIndex
 	sub.Text = L(subKey)
 	sub.TextColor3 = Theme.TextSecondary
 	sub.TextXAlignment = Enum.TextXAlignment.Left
-	sub.Font = Enum.Font.Gotham
+	sub.Font = FONT_BOLD
 	sub.TextSize = 11
 	sub.Parent = frame
 
@@ -1352,7 +1380,7 @@ local function createDropdownCard(parent, titleKey, subKey, values, defaultIndex
 	selector.Text = tostring(values[defaultIndex] or values[1] or "-")
 	selector.TextColor3 = Theme.TextPrimary
 	selector.TextXAlignment = Enum.TextXAlignment.Left
-	selector.Font = Enum.Font.GothamMedium
+	selector.Font = FONT_BOLD
 	selector.TextSize = 11
 	selector.AutoButtonColor = false
 	selector.TextTruncate = Enum.TextTruncate.AtEnd
@@ -1367,7 +1395,7 @@ local function createDropdownCard(parent, titleKey, subKey, values, defaultIndex
 	chevron.BackgroundTransparency = 1
 	chevron.Text = "v"
 	chevron.TextColor3 = Theme.TextSecondary
-	chevron.Font = Enum.Font.GothamBold
+	chevron.Font = FONT_BOLD
 	chevron.TextSize = 10
 	chevron.ZIndex = 3
 	chevron.Parent = selector
@@ -1422,7 +1450,7 @@ local function createDropdownCard(parent, titleKey, subKey, values, defaultIndex
 			row.Text = "  " .. tostring(value)
 			row.TextColor3 = index == handle.Index and Theme.Accent or Theme.TextPrimary
 			row.TextXAlignment = Enum.TextXAlignment.Left
-			row.Font = Enum.Font.GothamMedium
+			row.Font = FONT_BOLD
 			row.TextSize = 11
 			row.AutoButtonColor = false
 			row.TextTruncate = Enum.TextTruncate.AtEnd
@@ -1488,7 +1516,7 @@ local function createTextPanel(parent, titleKey, height, note)
 	label.Text = string.upper(L(titleKey))
 	label.TextColor3 = Theme.TextSecondary
 	label.TextXAlignment = Enum.TextXAlignment.Left
-	label.Font = Enum.Font.GothamBold
+	label.Font = FONT_BOLD
 	label.TextSize = 10
 	label.Parent = frame
 	label:SetAttribute("i18nKey", titleKey)
@@ -1503,7 +1531,7 @@ local function createTextPanel(parent, titleKey, height, note)
 	noteLabel.TextColor3 = Theme.Accent
 	noteLabel.TextXAlignment = Enum.TextXAlignment.Right
 	noteLabel.TextTruncate = Enum.TextTruncate.AtEnd
-	noteLabel.Font = Enum.Font.Code
+	noteLabel.Font = FONT_BOLD
 	noteLabel.TextSize = 10
 	noteLabel.Parent = frame
 
@@ -1529,7 +1557,7 @@ local function createTextPanel(parent, titleKey, height, note)
 	text.TextXAlignment = Enum.TextXAlignment.Left
 	text.TextYAlignment = Enum.TextYAlignment.Top
 	text.TextWrapped = false
-	text.Font = Enum.Font.Code
+	text.Font = FONT_BOLD
 	text.TextSize = 11
 	text.AutomaticSize = Enum.AutomaticSize.XY
 	text.Size = UDim2.fromOffset(0, 0)
@@ -1702,21 +1730,43 @@ table.sort(ZONE_ORDER, function(a, b)
 	return a.index < b.index
 end)
 
-local RARITY_TIER = {
-	Common = 1,
-	Uncommon = 2,
-	Rare = 3,
-	Epic = 4,
-	Legendary = 5,
-	Mythic = 6,
-	Divine = 7,
-	Cosmic = 8,
-	Secret = 9,
-	Celestial = 10,
-	Void = 11,
-	Inferno = 12,
-	Omega = 13,
-}
+-- ranks come from the game's own odds, so the names match the finder exactly
+local RARITY_TIER = {}
+do
+	local stats = {}
+	for _, pool in pairs(GameConfig.Zones or {}) do
+		if type(pool) == "table" then
+			for _, pet in ipairs(pool) do
+				local name = tostring(pet.Rarity or "?")
+				local entry = stats[name] or { count = 0, odds = 0, cash = 0 }
+				entry.count += 1
+				entry.odds += tonumber(pet.Chance) or 0
+				entry.cash += tonumber(pet.Cash) or 0
+				stats[name] = entry
+			end
+		end
+	end
+	local names = {}
+	for name in pairs(stats) do
+		table.insert(names, name)
+	end
+	table.sort(names, function(a, b)
+		local sa, sb = stats[a], stats[b]
+		local oa, ob = sa.odds / sa.count, sb.odds / sb.count
+		if math.abs(oa - ob) > 0.00001 then
+			return oa > ob -- common first
+		end
+		return sa.cash / sa.count < sb.cash / sb.count
+	end)
+	for index, name in ipairs(names) do
+		RARITY_TIER[name] = index
+	end
+	if #names == 0 then
+		for index, name in ipairs({ "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "Divine", "Cosmic", "Secret", "Celestial", "Void", "Inferno", "Omega", "Ascendant" }) do
+			RARITY_TIER[name] = index
+		end
+	end
+end
 
 local function zoneLabel(entry)
 	if not entry then
@@ -1916,10 +1966,22 @@ local function findStealTarget()
 				and Players:GetPlayerByUserId(custodian) ~= nil
 			local endsAt = child:GetAttribute("PickupEndsAt")
 			local expired = type(endsAt) == "number" and endsAt > 1e9 and endsAt < os.time()
-			if not taken and not expired then
+			local rarity = tostring(child:GetAttribute("PetRarity") or "Common")
+			local cash = tonumber(child:GetAttribute("PetIncomeCash")) or 0
+			local minRank = S.minRarity and S.minRarity ~= "Any" and (RARITY_TIER[S.minRarity] or 0) or 0
+			local passes = (RARITY_TIER[rarity] or 0) >= minRank and cash >= (tonumber(S.minValue) or 0)
+			if not taken and not expired and passes then
 				local dist = (part.Position - hrp.Position).Magnitude
 				if dist < bestDist then
-					best, bestDist = { object = child, part = part, prompt = prompt, dist = dist }, dist
+					best, bestDist = {
+						object = child,
+						part = part,
+						prompt = prompt,
+						dist = dist,
+						name = tostring(child:GetAttribute("PetDisplayName") or child:GetAttribute("DisplayName") or child.Name),
+						rarity = rarity,
+						cash = cash,
+					}, dist
 				end
 			end
 		end
@@ -1967,6 +2029,58 @@ local STEAL_OFFSETS = {
 	Vector3.new(0, -2.5, 0),
 }
 
+local function carrying()
+	local value = LocalPlayer:GetAttribute("SlashCarrying")
+	return value ~= nil and value ~= false
+end
+
+local function groundAt(x, z)
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	local char = LocalPlayer.Character
+	params.FilterDescendantsInstances = char and { char } or {}
+	local hit = workspace:Raycast(Vector3.new(x, 400, z), Vector3.new(0, -800, 0), params)
+	if hit then
+		return hit.Position + Vector3.new(0, 3, 0)
+	end
+	return nil
+end
+
+-- the safe zone lip faces the plots, so the drop-off point is just outside the low-x face
+local function lipPoint()
+	local zone = safeZone()
+	if not zone then
+		return nil
+	end
+	local x = zone.Position.X - zone.Size.X / 2 - 6
+	local z = zone.Position.Z
+	return groundAt(x, z) or Vector3.new(x, zone.Position.Y - zone.Size.Y / 2 + 3, z)
+end
+
+local function dropCarry()
+	if not carrying() then
+		return false
+	end
+	local uid = tostring(LocalPlayer:GetAttribute("SlashCarrying"))
+	local model
+	for _, d in ipairs(workspace:GetDescendants()) do
+		if d:IsA("Model") and d.Name:find(uid, 1, true) then
+			model = d
+			break
+		end
+	end
+	if not model then
+		return false
+	end
+	local prompt = model:FindFirstChildWhichIsA("ProximityPrompt", true)
+	if not prompt then
+		return false
+	end
+	firePrompt(prompt)
+	task.wait(0.5)
+	return not carrying()
+end
+
 local function attemptSteal()
 	local target = findStealTarget()
 	if not target then
@@ -2000,9 +2114,9 @@ local function attemptSteal()
 		end
 
 		if placed then
-			S.stealPhase = "trigger steal"
+			S.stealPhase = "hold steal"
 			firePrompt(target.prompt)
-			if waitForCarry(1.2) then
+			if waitForCarry(1.6) then
 				return true, "carrying"
 			end
 			if not alive() or S.stealAbort then
@@ -2014,25 +2128,55 @@ local function attemptSteal()
 	return false, everPlaced and "prompt denied" or "teleport blocked"
 end
 
-local function bankLoop()
-	local started = os.clock()
-	local timeout = 14
-	while alive() and not S.stealAbort do
-		if not LocalPlayer:GetAttribute("SlashCarrying") then
-			return true, os.clock() - started
-		end
-		if os.clock() - started > timeout then
-			return false, os.clock() - started
-		end
-		if not insideSafe() then
-			dashToSafe()
-		end
-		if LocalPlayer:GetAttribute("BeingChased") and S.antiGuard then
-			dashToSafe()
-		end
-		task.wait(0.25)
+-- step 1 drop in front of the zone, step 2 steal it again, step 3 walk in by steps
+local function carryHome()
+	local hrp, lip = root(), lipPoint()
+	if not (hrp and lip) then
+		return false, "no lip"
 	end
-	return false, os.clock() - started
+
+	S.stealPhase = "bawa ke depan safe zone"
+	releasePose()
+	hrp.AssemblyLinearVelocity = Vector3.zero
+	hrp.AssemblyAngularVelocity = Vector3.zero
+	hrp.CFrame = CFrame.new(lip)
+	task.wait(0.3)
+
+	if not carrying() then
+		return true, "masuk di lip"
+	end
+
+	S.stealPhase = "drop di depan safe zone"
+	dropCarry()
+	if not carrying() then
+		S.stealPhase = "steal lagi"
+		attemptSteal()
+	end
+	if not carrying() then
+		return false, "drop · gagal steal ulang"
+	end
+
+	S.stealPhase = "masuk safe zone step by step"
+	local zone = safeZone()
+	local gap = 7
+	local steps = math.max(3, math.floor((zone and zone.Size.X / 2 or 24) / gap) + 1)
+	for i = 1, steps do
+		if not alive() or S.stealAbort then
+			return false, "aborted"
+		end
+		if not carrying() then
+			return true, string.format("masuk step %d", i)
+		end
+		local goal = Vector3.new(lip.X + i * gap, lip.Y, lip.Z)
+		hrp.AssemblyLinearVelocity = Vector3.zero
+		hrp.CFrame = CFrame.new(goal)
+		task.wait(0.3)
+	end
+
+	if not carrying() then
+		return true, "masuk di ujung"
+	end
+	return false, "tetap carry"
 end
 
 local function stealCycle(silent)
@@ -2057,24 +2201,19 @@ local function stealCycle(silent)
 		return false
 	end
 
-	S.stealPhase = "lari ke safe zone"
-	dashToSafe()
-	task.wait(0.15)
-
-	S.stealPhase = "nahan carry di safe zone"
-	local banked, seconds = bankLoop()
+	local banked, detail = carryHome()
 
 	if banked then
 		S.stealCount += 1
 		S.stealPhase = "banked"
-		S.stealLast = string.format("banked · %.1fs", seconds)
+		S.stealLast = string.format("masuk · %s", tostring(detail or "safe zone"))
 		if not silent then
 			notify(string.format("pet masuk · total %d", S.stealCount), "good")
 		end
 	else
 		S.stealFails += 1
 		S.stealPhase = "carry tidak selesai"
-		S.stealLast = string.format("carry %.0fs tanpa bank", seconds)
+		S.stealLast = tostring(detail or "gagal masuk")
 	end
 	return banked
 end
@@ -2083,33 +2222,66 @@ local function stealLoop()
 	if S.stealRunning then
 		return
 	end
+	S.stealToken = (S.stealToken or 0) + 1
+	local token = S.stealToken
 	S.stealRunning = true
 
 	task.spawn(function()
-		while alive() and S.stealOn do
-			local carrying = LocalPlayer:GetAttribute("SlashCarrying")
-			if carrying then
-				-- already holding something: finish the run instead of stacking
+		while alive() and S.stealOn and S.stealToken == token do
+			if carrying() then
 				S.stealPhase = "bawa carry lama"
-				dashToSafe()
-				local banked, seconds = bankLoop()
-				S.stealLast = banked and string.format("banked lama · %.1fs", seconds)
-					or string.format("carry %.0fs tanpa bank", seconds)
+				local banked = carryHome()
+				S.stealLast = banked and "banked lama" or "carry lama tidak masuk"
 			else
 				stealCycle(true)
 			end
 
 			local waited = 0
-			while alive() and S.stealOn and waited < S.stealDelay do
+			while alive() and S.stealOn and S.stealToken == token and waited < S.stealDelay do
 				task.wait(0.1)
 				waited += 0.1
 			end
 		end
-		S.stealRunning = false
+		if S.stealToken == token then
+			S.stealRunning = false
+		end
 		if alive() then
 			S.stealPhase = "idle"
 		end
 	end)
+end
+
+local function stopSteal()
+	S.stealOn = false
+	S.stealAbort = true
+	S.stealToken = (S.stealToken or 0) + 1
+	S.stealRunning = false
+	S.stealPhase = "idle"
+	if UI.stealToggle then
+		UI.stealToggle.SetSilent(false)
+	end
+end
+
+local function stealPanelText()
+	local minR = S.minRarity or "Common"
+	local minV = tonumber(S.minValue) or 0
+	local filter = string.format("%s · >= $%s", minR, fmt(minV))
+	local zone = safeZone()
+	local lip = lipPoint()
+	local lines = {
+		"status    " .. (S.stealOn and ("on · " .. tostring(S.stealPhase)) or "off"),
+		"filter    " .. filter,
+		"target    " .. tostring(S.stealLast),
+		"sukses    " .. tostring(S.stealCount) .. "   gagal " .. tostring(S.stealFails),
+		"pickups   " .. tostring(#(pickupsFolder() and pickupsFolder():GetChildren() or {})),
+	}
+	if S.stealTarget then
+		lines[#lines + 1] = string.format("next      %s · %s · $%s", tostring(S.stealTarget.name), tostring(S.stealTarget.rarity), fmt(S.stealTarget.cash))
+	end
+	if zone and lip then
+		lines[#lines + 1] = string.format("lip       %.0f, %.0f, %.0f", lip.X, lip.Y, lip.Z)
+	end
+	return table.concat(lines, "\n")
 end
 
 -- ============================================================================
@@ -2197,15 +2369,23 @@ local function toggleSpeed(force)
 	else
 		local hum = humanoid()
 		if hum then
-			hum.WalkSpeed = 16
+			hum.WalkSpeed = S.baseSpeed or 16
 		end
+		task.delay(0.25, function()
+			if alive() and not S.speedOn then
+				local later = humanoid()
+				if later and math.abs(later.WalkSpeed - (S.baseSpeed or 16)) > 0.5 then
+					later.WalkSpeed = S.baseSpeed or 16
+				end
+			end
+		end)
 		notify("speed off")
 	end
 end
 
 createSection(pageMain, "secSpeed")
 
-UI.speedToggle = createToggleCard(pageMain, "fastWalk", "fastWalkSub", false, function(state)
+UI.speedToggle = createToggleCard(pageMain, "fastWalk", "fastWalkSub", S.speedOn, function(state)
 	S.speedOn = state
 	if state then
 		applySpeed()
@@ -2213,7 +2393,7 @@ UI.speedToggle = createToggleCard(pageMain, "fastWalk", "fastWalkSub", false, fu
 	else
 		local hum = humanoid()
 		if hum then
-			hum.WalkSpeed = 16
+			hum.WalkSpeed = S.baseSpeed or 16
 		end
 	end
 end)
@@ -2232,7 +2412,7 @@ createButtonCard(pageMain, "resetSpeed", "resetSpeedSub", Theme.BgButtonOff, fun
 	UI.speedToggle.SetSilent(false)
 	local hum = humanoid()
 	if hum then
-		hum.WalkSpeed = 16
+		hum.WalkSpeed = S.baseSpeed or 16
 	end
 	notify("walk speed reset")
 end)
@@ -2287,13 +2467,12 @@ UI.sessionPanel = createTextPanel(pageFarm, "liveTitle", 92)
 createSection(pageFarm, "secSteal")
 
 UI.stealToggle = createToggleCard(pageFarm, "stealOn", "stealOnSub", false, function(state)
-	S.stealOn = state
-	S.stealAbort = not state
 	if state then
+		S.stealOn = true
 		stealLoop()
 		notify("auto steal on")
 	else
-		S.stealPhase = "idle"
+		stopSteal()
 		notify("auto steal off")
 	end
 end)
@@ -2302,13 +2481,57 @@ UI.stealDelay = createSliderCard(pageFarm, "stealDelay", "stealDelaySub", 0.2, 6
 	S.stealDelay = value
 end)
 
+local RARITY_VALUES = { "Any" }
+for name in pairs(RARITY_TIER) do
+	table.insert(RARITY_VALUES, name)
+end
+table.sort(RARITY_VALUES, function(a, b)
+	if a == "Any" then return true end
+	if b == "Any" then return false end
+	return RARITY_TIER[a] < RARITY_TIER[b]
+end)
+local VALUE_VALUES = { "Any", "1M", "10M", "100M", "1B", "10B", "50B", "100B", "1T", "10T", "100T" }
+local VALUE_NUMBERS = {
+	["Any"] = 0, ["1M"] = 1e6, ["10M"] = 1e7, ["100M"] = 1e8,
+	["1B"] = 1e9, ["10B"] = 1e10, ["50B"] = 5e10, ["100B"] = 1e11,
+	["1T"] = 1e12, ["10T"] = 1e13, ["100T"] = 1e14,
+}
+
+local function rarityIndex(value)
+	for index, name in ipairs(RARITY_VALUES) do
+		if name == value then
+			return index
+		end
+	end
+	return 1
+end
+
+local function valueIndex(value)
+	for index, name in ipairs(VALUE_VALUES) do
+		if VALUE_NUMBERS[name] == value then
+			return index
+		end
+	end
+	return 1
+end
+
+UI.rarityMin = createDropdownCard(pageFarm, "minRarity", "minRaritySub", RARITY_VALUES, rarityIndex(S.minRarity), function(value)
+	S.minRarity = value
+	S.stealLast = "filter rarity · " .. tostring(value)
+end)
+
+UI.valueMin = createDropdownCard(pageFarm, "minValue", "minValueSub", VALUE_VALUES, valueIndex(S.minValue), function(value)
+	S.minValue = VALUE_NUMBERS[value] or 0
+	S.stealLast = "filter nilai · " .. tostring(value)
+end)
+
 createButtonCard(pageFarm, "stealOnce", "stealOnceSub", Theme.BgButtonOn, function()
 	task.spawn(function()
 		stealCycle(false)
 	end)
 end)
 
-UI.stealPanel = createTextPanel(pageFarm, "stealInfo", 104)
+UI.stealPanel = createTextPanel(pageFarm, "stealInfo", 132)
 
 createSection(pageFarm, "secGuard")
 
@@ -2381,6 +2604,265 @@ createButtonCard(pageFind, "scanAll", "scanAllSub", Theme.BgButtonOff, function(
 	notify("full map printed to console")
 end)
 
+-- ── all-map pet index with icons
+createSection(pageFind, "secIndex")
+
+local RARITY_COLOR = {
+	Common = Color3.fromRGB(148, 163, 184),
+	Uncommon = Color3.fromRGB(74, 222, 128),
+	Rare = Color3.fromRGB(96, 165, 250),
+	Epic = Color3.fromRGB(167, 139, 250),
+	Legendary = Color3.fromRGB(251, 191, 36),
+	Mythic = Color3.fromRGB(248, 113, 113),
+	Divine = Color3.fromRGB(250, 204, 21),
+	Cosmic = Color3.fromRGB(244, 114, 182),
+	Secret = Color3.fromRGB(240, 98, 146),
+	Celestial = Color3.fromRGB(103, 232, 249),
+	Void = Color3.fromRGB(139, 92, 246),
+	Inferno = Color3.fromRGB(249, 115, 22),
+	Omega = Color3.fromRGB(241, 245, 249),
+	Ascendant = Color3.fromRGB(56, 189, 248),
+}
+
+local function rarityColor(name)
+	local exact = RARITY_COLOR[name]
+	if exact then
+		return exact
+	end
+	local rank = RARITY_TIER[name]
+	if rank then
+		local hue = 0.62 - (rank / math.max(#RARITY_TIER, 1)) * 0.62
+		return Color3.fromHSV((hue + 1) % 1, 0.72, 0.98)
+	end
+	return Theme.TextSecondary
+end
+
+local function petIcons()
+	if S.petIcons then
+		return S.petIcons
+	end
+	local gameplay = ReplicatedStorage:FindFirstChild("SlashGameplay")
+	local mod = gameplay and gameplay:FindFirstChild("PetIndexIcons")
+	if mod then
+		local ok, res = pcall(require, mod)
+		if ok and type(res) == "table" then
+			S.petIcons = res
+		end
+	end
+	return S.petIcons or {}
+end
+
+local buildIndex
+local indexZones = { L("idxAll") }
+for _, entry in ipairs(ZONE_ORDER) do
+	table.insert(indexZones, zoneLabel(entry))
+end
+
+UI.indexZone = createDropdownCard(pageFind, "idxZone", "idxZoneSub", indexZones, 1, function(_, index)
+	local entry = index > 1 and ZONE_ORDER[index - 1] or nil
+	buildIndex(entry and entry.index or 0)
+end)
+
+local indexCard = card(pageFind, 268)
+
+local indexTitle = Instance.new("TextLabel")
+indexTitle.Size = UDim2.new(1, -140, 0, 20)
+indexTitle.Position = UDim2.fromOffset(12, 8)
+indexTitle.BackgroundTransparency = 1
+indexTitle.Text = string.upper(L("idxTitle"))
+indexTitle.TextColor3 = Theme.TextSecondary
+indexTitle.TextXAlignment = Enum.TextXAlignment.Left
+indexTitle.Font = FONT_BOLD
+indexTitle.TextSize = 10
+indexTitle.Parent = indexCard
+indexTitle:SetAttribute("i18nKey", "idxTitle")
+indexTitle:SetAttribute("i18nUpper", true)
+
+local indexCount = Instance.new("TextLabel")
+indexCount.Size = UDim2.new(0, 116, 0, 20)
+indexCount.Position = UDim2.new(1, -128, 0, 8)
+indexCount.BackgroundTransparency = 1
+indexCount.Text = ""
+indexCount.TextColor3 = Theme.Accent
+indexCount.TextXAlignment = Enum.TextXAlignment.Right
+indexCount.Font = FONT_BOLD
+indexCount.TextSize = 10
+indexCount.Parent = indexCard
+
+local indexScroll = Instance.new("ScrollingFrame")
+indexScroll.Size = UDim2.new(1, -16, 1, -38)
+indexScroll.Position = UDim2.fromOffset(8, 32)
+indexScroll.BackgroundColor3 = Theme.BgInput
+indexScroll.BackgroundTransparency = 0.45
+indexScroll.BorderSizePixel = 0
+indexScroll.ScrollBarThickness = 3
+indexScroll.ScrollBarImageColor3 = Theme.Accent
+indexScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+indexScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+indexScroll.Parent = indexCard
+addCorner(indexScroll, Theme.Pill)
+addPadding(indexScroll, 4)
+
+local indexLayout = Instance.new("UIListLayout")
+indexLayout.SortOrder = Enum.SortOrder.LayoutOrder
+indexLayout.Padding = UDim.new(0, 3)
+indexLayout.Parent = indexScroll
+
+local indexOrder = 0
+
+local function clearIndex()
+	indexOrder = 0
+	for _, child in ipairs(indexScroll:GetChildren()) do
+		if child:IsA("Frame") then
+			child:Destroy()
+		end
+	end
+end
+
+buildIndex = function(zoneIndex)
+	clearIndex()
+	local icons = petIcons()
+	local total = 0
+	local maps = 0
+
+	for _, entry in ipairs(ZONE_ORDER) do
+		if zoneIndex == 0 or entry.index == zoneIndex then
+			local pool = (GameConfig.Zones or {})[entry.index]
+			if type(pool) == "table" and #pool > 0 then
+				maps += 1
+				local sorted = table.clone(pool)
+				table.sort(sorted, function(a, b)
+					local ra = RARITY_TIER[a.Rarity] or 0
+					local rb = RARITY_TIER[b.Rarity] or 0
+					if ra ~= rb then
+						return ra < rb
+					end
+					return (tonumber(a.Chance) or 0) > (tonumber(b.Chance) or 0)
+				end)
+
+				local eggLabel = "-"
+				if type(entry.eggs) == "table" and #entry.eggs > 0 then
+					eggLabel = entry.eggs[1]
+					if #entry.eggs > 1 then
+						eggLabel = eggLabel .. " +" .. tostring(#entry.eggs - 1)
+					end
+				end
+
+				for _, pet in ipairs(sorted) do
+					total += 1
+					indexOrder += 1
+
+					local row = Instance.new("Frame")
+					row.LayoutOrder = indexOrder
+					row.Size = UDim2.new(1, -8, 0, 34)
+					row.BackgroundColor3 = Theme.BgCard
+					row.BackgroundTransparency = math.clamp(0.55 + (S.opacity or 0), 0, 0.97)
+					row:SetAttribute("baseBg", 0.55)
+					row.BorderSizePixel = 0
+					row.Parent = indexScroll
+					addCorner(row, Theme.Pill)
+
+					local icon = Instance.new("ImageLabel")
+					icon.Size = UDim2.fromOffset(26, 26)
+					icon.Position = UDim2.fromOffset(5, 4)
+					icon.BackgroundColor3 = rarityColor(pet.Rarity)
+					icon.BackgroundTransparency = 0.72
+					icon.Image = icons[pet.Name] or ""
+					icon.ScaleType = Enum.ScaleType.Fit
+					icon.BorderSizePixel = 0
+					icon.Parent = row
+					addCorner(icon, Theme.Pill)
+
+					local initial = Instance.new("TextLabel")
+					initial.Size = UDim2.fromScale(1, 1)
+					initial.BackgroundTransparency = 1
+					initial.Text = string.sub(tostring(pet.Name), 1, 1)
+					initial.TextColor3 = rarityColor(pet.Rarity)
+					initial.Font = FONT_BOLD
+					initial.TextSize = 13
+					initial.Visible = icons[pet.Name] == nil
+					initial.Parent = icon
+
+					local nameLabel = Instance.new("TextLabel")
+					nameLabel.Size = UDim2.fromOffset(150, 15)
+					nameLabel.Position = UDim2.fromOffset(38, 3)
+					nameLabel.BackgroundTransparency = 1
+					nameLabel.Text = tostring(pet.Name)
+					nameLabel.TextColor3 = Theme.TextPrimary
+					nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+					nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
+					nameLabel.Font = FONT_BOLD
+					nameLabel.TextSize = 11
+					nameLabel.Parent = row
+
+					local meta = Instance.new("TextLabel")
+					meta.Size = UDim2.fromOffset(190, 13)
+					meta.Position = UDim2.fromOffset(38, 18)
+					meta.BackgroundTransparency = 1
+					meta.Text = string.format("%s · %s", tostring(pet.Rarity or "?"), eggLabel)
+					meta.TextColor3 = rarityColor(pet.Rarity)
+					meta.TextXAlignment = Enum.TextXAlignment.Left
+					meta.TextTruncate = Enum.TextTruncate.AtEnd
+					meta.Font = FONT_BOLD
+					meta.TextSize = 9
+					meta.Parent = row
+
+					local chance = tonumber(pet.Chance) or 0
+					local odds = Instance.new("TextLabel")
+					odds.Size = UDim2.fromOffset(52, 14)
+					odds.Position = UDim2.new(1, -120, 0, 3)
+					odds.BackgroundTransparency = 1
+					odds.Text = chance > 0 and string.format("%.2f%%", chance) or "-"
+					odds.TextColor3 = Theme.TextPrimary
+					odds.TextXAlignment = Enum.TextXAlignment.Right
+					odds.Font = FONT_BOLD
+					odds.TextSize = 10
+					odds.Parent = row
+
+					local cash = Instance.new("TextLabel")
+					cash.Size = UDim2.fromOffset(60, 12)
+					cash.Position = UDim2.new(1, -128, 0, 18)
+					cash.BackgroundTransparency = 1
+					cash.Text = "$" .. fmt(tonumber(pet.Cash) or 0)
+					cash.TextColor3 = Theme.Good
+					cash.TextXAlignment = Enum.TextXAlignment.Right
+					cash.Font = FONT_BOLD
+					cash.TextSize = 9
+					cash.Parent = row
+
+					local ownedMark = S.ownedPets[norm(pet.Name)]
+					local status = Instance.new("TextLabel")
+					status.Size = UDim2.fromOffset(58, 12)
+					status.Position = UDim2.new(1, -62, 0, 18)
+					status.BackgroundTransparency = 1
+					status.Text = ownedMark and "OWNED" or "-"
+					status.TextColor3 = ownedMark and Theme.Good or Theme.TextSecondary
+					status.TextXAlignment = Enum.TextXAlignment.Right
+					status.Font = FONT_BOLD
+					status.TextSize = 9
+					status.Parent = row
+
+					local zoneTag = Instance.new("TextLabel")
+					zoneTag.Size = UDim2.fromOffset(58, 14)
+					zoneTag.Position = UDim2.new(1, -62, 0, 3)
+					zoneTag.BackgroundTransparency = 1
+					zoneTag.Text = string.format("Z%d", entry.index)
+					zoneTag.TextColor3 = Theme.TextSecondary
+					zoneTag.TextXAlignment = Enum.TextXAlignment.Right
+					zoneTag.Font = FONT_BOLD
+					zoneTag.TextSize = 9
+					zoneTag.Parent = row
+				end
+			end
+		end
+	end
+
+	indexCount.Text = string.format("%d pet · %d map", total, maps)
+end
+
+
+buildIndex(0)
+
 -- ============================================================================
 -- 16 · status page
 -- ============================================================================
@@ -2440,7 +2922,9 @@ local function applyProfile(profile)
 	profile = profile or DEFAULT_PROFILE
 
 	S.speedValue = tonumber(profile.SpeedValue) or 180
-	S.speedOn = profile.SpeedOn and true or false
+	-- auto speed is on every boot; turning it off is for this session only
+	S.speedOn = true
+	S.baseSpeed = tonumber(HUB.baseSpeed) or 16
 	S.antiAfk = profile.AntiAfk ~= false
 	S.antiRag = profile.AntiRag ~= false
 	S.antiGuard = profile.AntiGuard ~= false
@@ -2470,7 +2954,7 @@ local function applyProfile(profile)
 	else
 		local hum = humanoid()
 		if hum then
-			hum.WalkSpeed = 16
+			hum.WalkSpeed = S.baseSpeed or 16
 		end
 	end
 
@@ -2492,7 +2976,7 @@ do
 	meta.Text = ""
 	meta.TextColor3 = Theme.TextSecondary
 	meta.TextXAlignment = Enum.TextXAlignment.Left
-	meta.Font = Enum.Font.GothamMedium
+	meta.Font = FONT_BOLD
 	meta.TextSize = 11
 	meta.Parent = manager
 
@@ -2507,7 +2991,7 @@ do
 	input.TextColor3 = Theme.TextPrimary
 	input.TextXAlignment = Enum.TextXAlignment.Left
 	input.ClearTextOnFocus = false
-	input.Font = Enum.Font.GothamMedium
+	input.Font = FONT_BOLD
 	input.TextSize = 12
 	input.Parent = manager
 	addCorner(input, Theme.Pill)
@@ -2522,7 +3006,7 @@ do
 		btn.BackgroundTransparency = 0.2
 		btn.Text = L(labelKey)
 		btn.TextColor3 = Theme.TextPrimary
-		btn.Font = Enum.Font.GothamSemibold
+		btn.Font = FONT_BOLD
 		btn.TextSize = 11
 		btn.AutoButtonColor = false
 		btn.Parent = manager
@@ -2541,7 +3025,7 @@ do
 	historyTitle.Text = L("historyTitle")
 	historyTitle.TextColor3 = Theme.TextPrimary
 	historyTitle.TextXAlignment = Enum.TextXAlignment.Left
-	historyTitle.Font = Enum.Font.GothamSemibold
+	historyTitle.Font = FONT_BOLD
 	historyTitle.TextSize = 12
 	historyTitle.Parent = historyCard
 	historyTitle:SetAttribute("i18nKey", "historyTitle")
@@ -2593,7 +3077,7 @@ do
 			empty.Text = L("historyEmpty")
 			empty.TextColor3 = Theme.TextSecondary
 			empty.TextXAlignment = Enum.TextXAlignment.Left
-			empty.Font = Enum.Font.Gotham
+			empty.Font = FONT_BOLD
 			empty.TextSize = 11
 			empty.Parent = holder
 			return
@@ -2607,7 +3091,7 @@ do
 			row.TextColor3 = (item.action == "SAVE" or item.action == "CREATE") and Theme.Good
 				or (item.action == "LOAD" and Theme.Accent or Theme.TextSecondary)
 			row.TextXAlignment = Enum.TextXAlignment.Left
-			row.Font = Enum.Font.Code
+			row.Font = FONT_BOLD
 			row.TextSize = 11
 			row.Parent = holder
 		end
@@ -2702,6 +3186,59 @@ end
 -- ============================================================================
 -- 18 · settings page
 -- ============================================================================
+local function fontPass()
+	for _, inst in ipairs(ScreenGui:GetDescendants()) do
+		if (inst:IsA("TextLabel") or inst:IsA("TextButton") or inst:IsA("TextBox"))
+			and inst.Font == Enum.Font.Legacy then
+			inst.Font = FONT_BOLD
+		end
+	end
+end
+
+local function roundPass()
+	for _, inst in ipairs(ScreenGui:GetDescendants()) do
+		if (inst:IsA("Frame") or inst:IsA("TextButton") or inst:IsA("ScrollingFrame") or inst:IsA("ImageLabel"))
+			and inst.BackgroundTransparency < 0.98
+			and not inst:FindFirstChildOfClass("UICorner") then
+			local height = inst.AbsoluteSize.Y
+			if height <= 0 then
+				height = inst.Size.Y.Offset
+			end
+			local radius = Theme.Small
+			if height > 0 and height <= 22 then
+				radius = UDim.new(1, 0)
+			elseif height <= 40 then
+				radius = UDim.new(0, 14)
+			end
+			local corner = Instance.new("UICorner")
+			corner.CornerRadius = radius
+			corner.Parent = inst
+		end
+	end
+end
+
+local function captureOpacity()
+	for _, inst in ipairs(ScreenGui:GetDescendants()) do
+		if (inst:IsA("Frame") or inst:IsA("TextButton") or inst:IsA("ScrollingFrame") or inst:IsA("ImageLabel")) and inst:GetAttribute("baseBg") == nil then
+			inst:SetAttribute("baseBg", inst.BackgroundTransparency)
+		end
+	end
+end
+
+local function applyOpacity()
+	local value = math.clamp(tonumber(S.opacity) or 0, 0, 0.75)
+	if TrpLabel then
+		TrpLabel.Text = string.format("TRP %d%%", math.floor(value * 100 + 0.5))
+	end
+	for _, inst in ipairs(ScreenGui:GetDescendants()) do
+		local base = inst:GetAttribute("baseBg")
+		-- leave solid accents (knobs, bars, fills) alone, fade only the glass
+		if type(base) == "number" and base >= 0.08 then
+			inst.BackgroundTransparency = math.clamp(base + value, 0, 0.97)
+		end
+	end
+end
+
 createSection(pageSet, "secUi")
 
 do
@@ -2714,7 +3251,7 @@ do
 	title.Text = L("langTitle")
 	title.TextColor3 = Theme.TextPrimary
 	title.TextXAlignment = Enum.TextXAlignment.Left
-	title.Font = Enum.Font.GothamSemibold
+	title.Font = FONT_BOLD
 	title.TextSize = 13
 	title.Parent = langCard
 	title:SetAttribute("i18nKey", "langTitle")
@@ -2726,7 +3263,7 @@ do
 	sub.Text = L("langSub")
 	sub.TextColor3 = Theme.TextSecondary
 	sub.TextXAlignment = Enum.TextXAlignment.Left
-	sub.Font = Enum.Font.Gotham
+	sub.Font = FONT_BOLD
 	sub.TextSize = 11
 	sub.Parent = langCard
 	sub:SetAttribute("i18nKey", "langSub")
@@ -2738,7 +3275,7 @@ do
 	langBtn.BackgroundTransparency = 0.2
 	langBtn.Text = LANG == 1 and "EN" or "ID"
 	langBtn.TextColor3 = Theme.TextPrimary
-	langBtn.Font = Enum.Font.GothamBold
+	langBtn.Font = FONT_BOLD
 	langBtn.TextSize = 12
 	langBtn.AutoButtonColor = false
 	langBtn.Parent = langCard
@@ -2748,9 +3285,21 @@ do
 	UI.langButton = langBtn
 end
 
-UI.scaleSlider = createSliderCard(pageSet, "uiScale", "uiScaleSub", 0.7, 1.3, 1, 0.05, function(value)
+UI.opacitySlider = createSliderCard(pageSet, "uiOpacity", "uiOpacitySub", 0, 0.75, S.opacity, 0.05, function(value)
+	S.opacity = value
+	Store.opacity = value
+	applyOpacity()
+	saveStore()
+end, function(value)
+	return string.format("%d%%", math.floor(value * 100 + 0.5))
+end)
+
+UI.scaleSlider = createSliderCard(pageSet, "uiScale", "uiScaleSub", 0.7, 1.3, S.uiScale, 0.05, function(value)
+	S.uiScale = value
+	Store.uiScale = value
 	MainScale.Scale = value
 	MiniScale.Scale = value * 0.9
+	saveStore()
 end)
 
 createSection(pageSet, "secDanger")
@@ -2921,14 +3470,7 @@ table.insert(
 			end
 
 			if UI.stealPanel then
-				UI.stealPanel.Set(string.format(
-					"phase          %s\ncarrying       %s\nbanked         %d\nfails          %d\nlast           %s",
-					tostring(S.stealPhase),
-					tostring(LocalPlayer:GetAttribute("SlashCarrying") or "no"),
-					S.stealCount,
-					S.stealFails,
-					tostring(S.stealLast)
-				))
+				UI.stealPanel.Set(stealPanelText())
 				UI.stealPanel.SetNote(S.stealOn and "loop" or "idle")
 			end
 
@@ -2995,6 +3537,7 @@ do
 			GpuLabel.Text = string.format("GPU %.1fms", gpu)
 			GpuLabel.TextColor3 = gpuColor
 			MiniGpu.Text = GpuLabel.Text
+			TrpLabel.Text = string.format("TRP %d%%", math.floor((S.opacity or 0) * 100 + 0.5))
 			MiniGpu.TextColor3 = gpuColor
 		end)
 	)
@@ -3092,16 +3635,54 @@ HUB.stealOnce = function()
 	end)
 end
 HUB.setAutoSteal = function(state)
-	S.stealOn = state and true or false
-	S.stealAbort = not S.stealOn
 	if UI.stealToggle then
-		UI.stealToggle.SetSilent(S.stealOn)
+		UI.stealToggle.SetSilent(state and true or false)
 	end
-	if S.stealOn then
+	if state then
+		S.stealOn = true
 		stealLoop()
 	else
-		S.stealPhase = "idle"
+		stopSteal()
 	end
+	return S.stealOn
+end
+HUB.stopSteal = stopSteal
+HUB.rarities = RARITY_TIER
+HUB.rarityOptions = RARITY_VALUES
+HUB.setScale = function(value)
+	value = math.clamp(tonumber(value) or 0.7, 0.7, 1.3)
+	S.uiScale = value
+	Store.uiScale = value
+	MainScale.Scale = value
+	MiniScale.Scale = value * 0.9
+	if UI.scaleSlider then
+		UI.scaleSlider.Set(value)
+	end
+	saveStore()
+	return value
+end
+HUB.setOpacity = function(value)
+	value = math.clamp(tonumber(value) or 0, 0, 0.75)
+	S.opacity = value
+	Store.opacity = value
+	applyOpacity()
+	if UI.opacitySlider then
+		UI.opacitySlider.Set(value)
+	end
+	saveStore()
+	return value
+end
+HUB.setFilter = function(rarity, minValue)
+	if rarity then
+		S.minRarity = rarity
+		if UI.rarityMin then
+			UI.rarityMin.Set(RARITY_VALUES, rarityIndex(rarity))
+		end
+	end
+	if minValue then
+		S.minValue = tonumber(minValue) or 0
+	end
+	return S.minRarity, S.minValue
 end
 HUB.zone = function(index)
 	for position, entry in ipairs(ZONE_ORDER) do
@@ -3164,9 +3745,13 @@ table.insert(
 )
 
 -- boot: stored profile first, then the default zone card
+fontPass()
+roundPass()
+captureOpacity()
+applyOpacity()
 applyProfile(Store.profiles[Store.selected])
 minimized = false
-tween(MainScale, Theme.Pop, { Scale = 1 })
+tween(MainScale, Theme.Pop, { Scale = S.uiScale })
 ReloadFill.Size = UDim2.new(0, 0, 1, 0)
 ReloadFill.BackgroundTransparency = 0
 local reloadAnim = tween(ReloadFill, Theme.Reload, { Size = UDim2.new(1, 0, 1, 0) })
