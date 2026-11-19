@@ -2555,13 +2555,16 @@ local function guardTick()
 
 	if LocalPlayer:GetAttribute("SlashCarrying") then
 		dashToSafe()
-	elseif not insideSafe() and not S.stealOn then
-		-- with auto steal on a failed grab must retry in place -- running back
-		-- to the plot here is what made it look like a random teleport home
+	elseif not insideSafe() and not S.stealOn and not S.breakOn then
+		-- a guard chase must never yank us off the map we are farming: while
+		-- auto break is on, breakCycle owns the position and pulling back to the
+		-- plot here makes the character ping-pong between zones. even outside
+		-- auto break, only retreat when we are actually near the plot -- from a
+		-- different map there is nothing to defend by teleporting home.
 		local plot = myPlot()
 		local spawn = plot and plot:FindFirstChild("SpawnPoint")
 		local hrp = root()
-		if spawn and hrp then
+		if spawn and hrp and (spawn.Position - hrp.Position).Magnitude < 80 then
 			releasePose()
 			hrp.AssemblyLinearVelocity = Vector3.zero
 			hrp.CFrame = spawn.CFrame + Vector3.new(0, 4, 0)
@@ -2952,6 +2955,18 @@ local function equipGameSlot(source)
 	if not uid then
 		return false
 	end
+	uid = tostring(uid)
+	-- never re-send Equip for something already held: the game treats a repeat
+	-- as Unequip and answers Code=Replay ("already handled") on every cycle
+	local heldChar = LocalPlayer.Character
+	if heldChar then
+		for _, candidate in ipairs(heldChar:GetChildren()) do
+			if candidate:IsA("Tool")
+				and tostring(candidate:GetAttribute("SlashItemUID") or candidate:GetAttribute("UID")) == uid then
+				return true
+			end
+		end
+	end
 	local folder = ReplicatedStorage:FindFirstChild("SlashInventory")
 	local remotes = folder and folder:FindFirstChild("Remotes")
 	local request = remotes and remotes:FindFirstChild("Request")
@@ -2962,6 +2977,18 @@ local function equipGameSlot(source)
 	local ok, result = pcall(getter.InvokeServer, getter)
 	local snapshot = ok and result and result.Snapshot or nil
 	local revision = snapshot and tonumber(snapshot.Revision) or 0
+	if snapshot and snapshot.Equipment then
+		local held = tostring(snapshot.Equipment.HeldUID or "")
+		if held ~= "" and held ~= "nil" and held == uid then
+			return true
+		end
+	end
+	if snapshot and snapshot.Selection then
+		local sel = tostring(snapshot.Selection.UID or "")
+		if sel ~= "" and sel ~= "nil" and sel == uid then
+			return true
+		end
+	end
 	local reqId = nextInvRequestId()
 	pcall(request.FireServer, request, {
 		RequestId = reqId,
@@ -3020,7 +3047,8 @@ local function ensureWeapon()
 	end
 	local tool = char:FindFirstChildOfClass("Tool")
 	if tool and swordDamage(tool) > 0 then
-		equipGameSlot(tool)
+		-- already held -- sending Equip again makes the game toggle it to
+		-- Unequip and fires a Code=Replay toast on every cycle
 		return true, "siap · " .. tostring(tool.Name)
 	end
 	local backpack = LocalPlayer.Backpack
@@ -3040,9 +3068,9 @@ local function ensureWeapon()
 		-- the real swords live in the server inventory snapshot
 		local uid, damage, name = strongestSwordUid()
 		if uid and damage > 0 then
-			-- the server can swing this sword through the Auto operation even when
-			-- the client Tool never materialises (common after a session rejoin),
-			-- so treat a valid server-side sword as armed and equip in background
+			-- equip once in the background. equipGameSlot now short-circuits when
+			-- the sword is already held or the server says it is selected, so a
+			-- repeated cycle can no longer toggle it off or spam Replay toasts
 			task.spawn(function()
 				pcall(equipGameSlot, uid)
 			end)
@@ -3171,6 +3199,15 @@ end
 local function breakCycle(silent)
 	S.breakToken += 1
 	local token = S.breakToken
+	local function failBreak(reason)
+		-- a deliberate off mid-cycle invalidates the token; that is a clean stop,
+		-- not a failed egg
+		if S.breakOn then S.breakFails += 1 end
+		S.breakLast = reason
+		S.breakPhase = "idle"
+		if not silent then notify(S.breakLast) end
+		return false, S.breakLast
+	end
 	if S.treadmillOn then
 		leaveTreadmill()
 	else
@@ -3179,19 +3216,12 @@ local function breakCycle(silent)
 	S.breakPhase = "cari telur · map " .. tostring(S.breakMap)
 	local egg = findBreakEgg()
 	if not egg then
-		S.breakFails += 1
-		S.breakLast = "no egg · map " .. tostring((GameConfig.ZoneNames or {})[S.breakMap] or S.breakMap)
-		S.breakPhase = "idle"
-		if not silent then notify(S.breakLast) end
-		return false, S.breakLast
+		return failBreak("no egg · map " .. tostring((GameConfig.ZoneNames or {})[S.breakMap] or S.breakMap))
 	end
 	S.breakTarget = egg
 	local armed, weaponDetail = ensureWeapon()
 	if not armed then
-		S.breakFails += 1
-		S.breakLast = weaponDetail
-		S.breakPhase = "idle"
-		return false, S.breakLast
+		return failBreak(weaponDetail)
 	end
 	S.breakPhase = "teleport ke telur"
 	-- the still-running Auto slash can delete the egg between findBreakEgg and
@@ -3203,10 +3233,7 @@ local function breakCycle(silent)
 		return true, S.breakLast
 	end
 	if not teleportToEgg(egg) then
-		S.breakFails += 1
-		S.breakLast = "teleport gagal"
-		S.breakPhase = "idle"
-		return false, S.breakLast
+		return failBreak("teleport gagal")
 	end
 	S.breakPhase = "auto slash · " .. tostring(weaponDetail)
 	local ok, reason = swingTheEgg(egg, token)
@@ -3215,18 +3242,20 @@ local function breakCycle(silent)
 		S.breakCount += 1
 		S.breakLast = "pecah · " .. tostring(egg:GetAttribute("EggDisplayName") or egg.Name)
 	else
-		S.breakFails += 1
+		if S.breakOn then S.breakFails += 1 end
 		S.breakLast = reason
 	end
 	if not silent then notify(S.breakLast) end
 	return ok, S.breakLast
 end
 
-local function breakLoop()
-	while S.breakOn do
+local function breakLoop(token)
+	-- a stale loop from a previous on/off must die immediately, otherwise two
+	-- loops run side by side and their breakTokens invalidate each other's swings
+	while S.breakOn and S.breakLoopToken == token do
 		local ok, reason = pcall(breakCycle, true)
 		if not ok then
-			S.breakFails += 1
+			if S.breakOn then S.breakFails += 1 end
 			S.breakLast = "error · " .. tostring(reason)
 		end
 		-- auto slash stays armed on the server, so keep this gap short -- a long
@@ -3236,7 +3265,7 @@ local function breakLoop()
 			waitTime += 0.4 + math.random(0, 120) / 100
 		end
 		local elapsed = 0
-		while elapsed < waitTime and S.breakOn do
+		while elapsed < waitTime and S.breakOn and S.breakLoopToken == token do
 			task.wait(0.1)
 			elapsed += 0.1
 		end
@@ -3247,8 +3276,9 @@ end
 function setAutoBreak(state)
 	S.breakOn = state and true or false
 	S.breakToken += 1
+	S.breakLoopToken = (S.breakLoopToken or 0) + 1
 	if S.breakOn then
-		task.spawn(breakLoop)
+		task.spawn(breakLoop, S.breakLoopToken)
 	else
 		S.breakPhase = "idle"
 		pcall(sendGameRequest, "Auto", { Enabled = false })
