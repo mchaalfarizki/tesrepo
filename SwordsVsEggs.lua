@@ -3045,16 +3045,27 @@ local function weaponStats()
 	}
 end
 
--- HUB NEVER FIRES AN INVENTORY Equip REQUEST.
--- the server keeps a high-water mark for RequestId. any id we send (even once)
--- pushes that mark above the game client's own small counter, so every later
--- click on a sword is answered Code=Replay ("that request was already handled").
--- the server already tracks the selected sword in the snapshot (Selection.UID)
--- and SlashAuto swings it without a client Tool, so we only observe and never
--- touch the inventory Request remote. keep this function as a no-op checker so
--- old call sites stay silent by design.
-local function equipGameSlot(source)
-	return true
+-- THE HUB NEVER FIRES SlashInventory.Remotes.Request ITSELF. That remote keeps a
+-- high-water mark on RequestId and any id we choose can break the game client's
+-- own sword clicks with Code=Replay. Instead we ask the game's own inventory UI
+-- to equip through its internal BindableEvent, so the client uses its own counter.
+local equipAt = 0
+local function equipGameSlot(uid)
+	if not uid then
+		return false, "no sword uid"
+	end
+	if os.clock() - equipAt < 1.5 then
+		return true, "cooldown"
+	end
+	local gui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+	local panel = gui and gui:FindFirstChild("SlashInventory")
+	local request = panel and panel:FindFirstChild("EquipRequest")
+	if not request then
+		return false, "no equip request"
+	end
+	equipAt = os.clock()
+	request:Fire(uid)
+	return true, "equip dikirim"
 end
 
 -- strongest sword definition id -> damage, used to pick from the server inventory
@@ -3063,12 +3074,18 @@ local function strongestSwordUid()
 	local remotes = folder and folder:FindFirstChild("Remotes")
 	local getter = remotes and remotes:FindFirstChild("GetSnapshot")
 	if not getter then
-		return nil, 0, nil
+		return nil, 0, nil, nil
 	end
 	local ok, result = pcall(getter.InvokeServer, getter)
 	local snapshot = ok and result and result.Snapshot or nil
 	if not snapshot or type(snapshot.Items) ~= "table" then
-		return nil, 0, nil
+		return nil, 0, nil, nil
+	end
+	local equipment = snapshot.Equipment or {}
+	local held = tostring(equipment.HeldUID or "")
+	local selected = snapshot.Selection or {}
+	if held == "" then
+		held = tostring(selected.UID or "")
 	end
 	local cfg = GameConfig.Swords or {}
 	local byId = {}
@@ -3085,7 +3102,7 @@ local function strongestSwordUid()
 			end
 		end
 	end
-	return bestUid, bestDamage or 0, bestName
+	return bestUid, bestDamage or 0, bestName, held
 end
 
 local function ensureWeapon()
@@ -3112,13 +3129,20 @@ local function ensureWeapon()
 		end
 	end
 	if not best then
-		-- the character may be holding a pet tool and the backpack empty;
-		-- the real swords live in the server inventory snapshot
-		local uid, damage, name = strongestSwordUid()
+		-- the swords live in the server inventory, not in the client backpack.
+		-- ask the game's own EquipRequest so the client's RequestId counter stays
+		-- intact, then confirm HeldUID before letting Auto swing.
+		local uid, damage, name, held = strongestSwordUid()
 		if uid and damage > 0 then
-			-- server-side Selection is enough: SlashAuto swings it without a
-			-- client Tool. never fire inventory Equip here (see equipGameSlot).
-			return true, "siap server · " .. tostring(name or uid)
+			if held ~= uid then
+				pcall(equipGameSlot, uid)
+				task.wait(0.4)
+				_, _, _, held = strongestSwordUid()
+			end
+			if held == uid then
+				return true, "siap · " .. tostring(name or uid)
+			end
+			return false, "sword belum terpasang"
 		end
 		return false, "no weapon"
 	end
@@ -3379,6 +3403,11 @@ S.Break = {
 			expected = swing.expected,
 			cooldown = swing.cooldown,
 			suggestion = egg and swordSuggestion(eggHealth(egg), swing) or nil,
+			on = S.breakOn,
+			count = S.breakCount,
+			fails = S.breakFails,
+			phase = S.breakPhase,
+			last = S.breakLast,
 		}
 	end,
 }
