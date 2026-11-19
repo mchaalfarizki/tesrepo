@@ -1646,6 +1646,66 @@ local function root()
 	return char and char:FindFirstChild("HumanoidRootPart") or nil
 end
 
+local function carrying()
+	local value = LocalPlayer:GetAttribute("SlashCarrying")
+	return value ~= nil and value ~= false
+end
+
+-- players and the game's zone guards are both threats while a pet is on the back
+local function nearestThreat(radius)
+	local hrp = root()
+	if not hrp then
+		return nil
+	end
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player ~= LocalPlayer and player.Character then
+			local other = player.Character:FindFirstChild("HumanoidRootPart")
+			if other and (other.Position - hrp.Position).Magnitude <= radius then
+				return player, "player " .. tostring(player.Name), (other.Position - hrp.Position).Magnitude
+			end
+		end
+	end
+	local runtime = workspace:FindFirstChild("SlashRuntime")
+	local guards = runtime and runtime:FindFirstChild("Guards")
+	if guards then
+		for _, guard in ipairs(guards:GetChildren()) do
+			if guard:IsA("BasePart") then
+				local state = tostring(guard:GetAttribute("ChaseState") or "")
+				local chasing = state ~= "" and state ~= "Idle"
+				local dist = (guard.Position - hrp.Position).Magnitude
+				-- chasing guards count at full radius; idle ones only when very close
+				if dist <= (chasing and radius or 12) then
+					return guard, "guard " .. tostring(guard.Name), dist
+				end
+			end
+		end
+	end
+	return nil
+end
+
+-- gameplay requests go straight to the server, no focused window and no mouse needed
+-- time-based and far above the game client's own small counter; avoids Replay rejects
+local nextRequestId = os.time() * 1000 + math.random(1000, 999999)
+local function sendGameRequest(operation, args)
+	local folder = ReplicatedStorage:FindFirstChild("SlashGameplay")
+	local event = folder and folder:FindFirstChild("Request")
+	if not event then
+		return false, "no gameplay request"
+	end
+	nextRequestId += 1
+	local ok, err = pcall(function()
+		event:FireServer({
+			RequestId = nextRequestId,
+			Operation = operation,
+			Args = args or {},
+		})
+	end)
+	return ok, err
+end
+
+-- assigned once the invisibility helpers exist
+local revealCarriedPet = function() end
+
 local function myPlot()
 	local plots = workspace:FindFirstChild("Plots")
 	if not plots then
@@ -1974,6 +2034,21 @@ local function dashToSafe(fromPosition)
 	return true
 end
 
+-- instant bail-out: the zone banks the pet as soon as the character crosses in
+local function emergencyBank(reason)
+	if not carrying() then
+		return false
+	end
+	S.emergencyBank = true
+	S.stealPhase = "darurat · " .. tostring(reason)
+	dashToSafe()
+	local hum = humanoid()
+	if hum then
+		hum.Health = hum.MaxHealth
+	end
+	return true
+end
+
 local function pickupsFolder()
 	local runtime = workspace:FindFirstChild("SlashRuntime")
 	return runtime and runtime:FindFirstChild("Pickups")
@@ -2068,11 +2143,6 @@ local STEAL_OFFSETS = {
 	Vector3.new(0, -2.5, 0),
 }
 
-local function carrying()
-	local value = LocalPlayer:GetAttribute("SlashCarrying")
-	return value ~= nil and value ~= false
-end
-
 local function groundAt(x, z)
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
@@ -2157,7 +2227,15 @@ local function attemptSteal()
 			S.stealPhase = "hold steal"
 			firePrompt(target.prompt)
 			if waitForCarry(1.6) then
-				return true, "carrying"
+				-- let the server finish the carry handoff before moving; yanking the
+				-- root away on the same frame is what made the animal blink out
+				S.stealPhase = "stabilkan carry"
+				task.wait(0.45 + math.random(0, 25) / 100)
+				revealCarriedPet()
+				if carrying() then
+					return true, "carrying"
+				end
+				return false, "carry hilang · terlalu cepat"
 			end
 			if not alive() or S.stealAbort then
 				return false, "aborted"
@@ -2187,8 +2265,16 @@ local function glideTo(goal, speed, phase)
 	local conn
 	local t0 = os.clock()
 	conn = RunService.RenderStepped:Connect(function()
-		if not alive() or S.stealAbort then
+		if not alive() or S.stealAbort or S.emergencyBank then
 			return
+		end
+		if S.antiGuard and carrying() then
+			local threat, kind, dist = nearestThreat(45)
+			if threat then
+				S.stealPhase = "musuh dekat · " .. tostring(kind) .. " " .. math.floor(dist) .. "m"
+				emergencyBank(kind)
+				return
+			end
 		end
 		local alpha = math.clamp((os.clock() - t0) / duration, 0, 1)
 		local eased = alpha * alpha * (3 - 2 * alpha)
@@ -2200,7 +2286,7 @@ local function glideTo(goal, speed, phase)
 	end)
 
 	local limit = os.clock() + duration + 1.5
-	while alive() and not S.stealAbort and os.clock() < limit do
+	while alive() and not S.stealAbort and not S.emergencyBank and os.clock() < limit do
 		task.wait(0.05)
 	end
 	if conn then
@@ -2211,6 +2297,7 @@ end
 
 -- steal, then run the carry in one fast tween to the lip and one into the zone
 local function carryHome()
+	S.emergencyBank = false
 	local zone = safeZone()
 	local lip = lipPoint()
 	if not zone then
@@ -2222,10 +2309,13 @@ local function carryHome()
 		zone.Position.Z
 	)
 
-	-- one continuous fast tween, no stopover at the lip
-	glideTo(inside, 240 + math.random(-20, 45), "jalan cepat ke safe zone")
+	-- one continuous tween, no stopover at the lip; slower start keeps the pet attached
+	glideTo(inside, 185 + math.random(-15, 35), "jalan cepat ke safe zone")
 	if not alive() or S.stealAbort then
 		return false, "aborted"
+	end
+	if S.emergencyBank then
+		return insideSafe() and not carrying(), insideSafe() and "darurat · masuk zone" or "darurat · belum masuk"
 	end
 	if insideSafe() and not carrying() then
 		return true, "masuk · tween langsung ke dalam zone"
@@ -2406,22 +2496,7 @@ local function ragTick()
 	end
 end
 
-local function nearestOther(radius)
-	local hrp = root()
-	if not hrp then
-		return nil
-	end
-	for _, player in ipairs(Players:GetPlayers()) do
-		if player ~= LocalPlayer and player.Character then
-			local other = player.Character:FindFirstChild("HumanoidRootPart")
-			if other and (other.Position - hrp.Position).Magnitude <= radius then
-				return player
-			end
-		end
-	end
-	return nil
-end
-
+do
 local carryPromptCache, carryPromptAt, promptLockUntil = nil, 0, 0
 local function myCarryPrompt()
 	local uid = LocalPlayer:GetAttribute("SlashCarrying")
@@ -2443,10 +2518,20 @@ local function myCarryPrompt()
 			end
 		end
 	end
+	-- carried pets live at the workspace root as Reward_<uid>, not in Pickups
+	local reward = workspace:FindFirstChild("Reward_" .. tostring(uid))
+	if reward then
+		local prompt = reward:FindFirstChildWhichIsA("ProximityPrompt", true)
+		if prompt then
+			carryPromptCache, carryPromptAt = prompt, os.clock()
+			return prompt
+		end
+	end
 	return nil
 end
 
--- keep other players off the pet we are carrying
+-- keep other players off the pet we are carrying: lock its steal prompt the
+-- entire time we carry it, not only when a threat is close
 local function antiStealTick()
 	if not S.antiSteal then
 		return
@@ -2455,34 +2540,96 @@ local function antiStealTick()
 	if not prompt then
 		return
 	end
-	if nearestOther(14) then
+	if carrying() then
 		prompt.Enabled = false
-		promptLockUntil = os.clock() + 0.8
-		S.stealPhase = "pet dikunci · player dekat"
+		if nearestThreat(18) then
+			promptLockUntil = os.clock() + 1.2
+			S.stealPhase = "pet dikunci · anti steal"
+		end
 	elseif os.clock() > promptLockUntil and not prompt.Enabled then
 		prompt.Enabled = true
 	end
 end
 
--- bail out when someone closes in to hit us mid-carry
+-- nearest OTHER player only (guards belong to antiGuard, not antiHit)
+local function nearestPlayer(radius)
+	local hrp = root()
+	if not hrp then
+		return nil, 0
+	end
+	local best, bestDist = nil, radius
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player ~= LocalPlayer and player.Character then
+			local part = player.Character:FindFirstChild("HumanoidRootPart")
+			if part then
+				local dist = (part.Position - hrp.Position).Magnitude
+				if dist < bestDist then
+					best, bestDist = player, dist
+				end
+			end
+		end
+	end
+	return best, bestDist
+end
+
+-- dodge away from other players ANYWHERE (zone 1 included), carrying or not.
+-- server owns real health, so the only working client-side immunity is to never
+-- be inside their hit radius. guards are handled separately by antiGuard.
 local function antiHitTick()
-	if not S.antiHit or not carrying() then
+	if not S.antiHit then
 		return
 	end
-	if nearestOther(25) then
-		S.stealPhase = "musuh dekat · mundur"
-		dashToSafe()
-	end
+	local victim, dist = nearestPlayer(18)
 	local hum = humanoid()
-	if hum and hum.Health < hum.MaxHealth then
-		hum.Health = hum.MaxHealth
+	if hum then
+		if hum.Health < hum.MaxHealth then
+			hum.Health = hum.MaxHealth
+		end
+		if LocalPlayer.Character and LocalPlayer.Character:GetAttribute("Ragdolled") then
+			LocalPlayer.Character:SetAttribute("Ragdolled", false)
+		end
 	end
+	if not victim then
+		return
+	end
+	local hrp = root()
+	if not hrp then
+		return
+	end
+	-- while carrying, stealing must stay normal: antiGuard owns the emergency
+	-- bank, antiSteal locks the prompt. antiHit only refreshes health here.
+	-- when NOT carrying (e.g. walking in zone 1), dodge straight back to plot spawn.
+	if carrying() then
+		S.stealPhase = "anti hit · player " .. math.floor(dist) .. "m · kebal"
+		return
+	end
+	local plot = myPlot()
+	local spawn = plot and plot:FindFirstChild("SpawnPoint")
+	if spawn then
+		releasePose()
+		hrp.AssemblyLinearVelocity = Vector3.zero
+		hrp.CFrame = spawn.CFrame + Vector3.new(0, 4, 0)
+	end
+end
+S.AntiStealTick = antiStealTick
+S.AntiHitTick = antiHitTick
 end
 
 local hiddenInstances = {}
 local function hideModel(model)
 	if not model then
 		return
+	end
+	-- never hide the animal we are carrying, even if it lives in the Pickups folder
+	local carryUid = LocalPlayer:GetAttribute("SlashCarrying")
+	if carryUid then
+		local node = model
+		while node do
+			if tostring(node.Name):find(tostring(carryUid), 1, true) then
+				return
+			end
+			node = node.Parent
+		end
 	end
 	local parts = {}
 	if model:IsA("BasePart") then
@@ -2527,6 +2674,39 @@ local function clearInvisible()
 	table.clear(hiddenInstances)
 end
 
+revealCarriedPet = function()
+	local uid = LocalPlayer:GetAttribute("SlashCarrying")
+	if not uid then
+		return
+	end
+	local kept = {}
+	for _, d in ipairs(hiddenInstances) do
+		local node, mine = d, false
+		while node do
+			if tostring(node.Name):find(tostring(uid), 1, true) then
+				mine = true
+				break
+			end
+			node = node.Parent
+		end
+		if mine then
+			local transparency = d:GetAttribute("elenaOrigTrans")
+			if transparency ~= nil and d:IsA("BasePart") then
+				d.Transparency = transparency
+				d:SetAttribute("elenaOrigTrans", nil)
+			end
+			local enabled = d:GetAttribute("elenaOrigEnabled")
+			if enabled ~= nil then
+				d.Enabled = enabled
+				d:SetAttribute("elenaOrigEnabled", nil)
+			end
+		else
+			table.insert(kept, d)
+		end
+	end
+	hiddenInstances = kept
+end
+
 local function scanInvisible()
 	if not S.invisible then
 		return
@@ -2554,6 +2734,8 @@ local function scanInvisible()
 			hideModel(model)
 		end
 	end
+	-- a freshly picked-up pet must never stay hidden, even if a scan raced the handoff
+	revealCarriedPet()
 end
 
 function setInvisible(state)
@@ -2612,13 +2794,14 @@ local function findBreakEgg()
 	return best
 end
 
-local function weaponStats()
-	local char = LocalPlayer.Character
-	local tool = char and char:FindFirstChildOfClass("Tool") or nil
+local function swordDamage(tool)
+	if not tool then
+		return 0, "no weapon"
+	end
 	local cfg = GameConfig.Swords or {}
-	local defId = tool and tool:GetAttribute("SlashDefinitionId") or nil
+	local defId = tool:GetAttribute("SlashDefinitionId")
 	local damage = 0
-	local name = tool and tool.Name or "no weapon"
+	local name = tool.Name
 	if defId then
 		for _, entry in pairs(cfg) do
 			if tostring(entry.DefinitionId) == tostring(defId) then
@@ -2636,6 +2819,13 @@ local function weaponStats()
 			end
 		end
 	end
+	return damage, name
+end
+
+local function weaponStats()
+	local char = LocalPlayer.Character
+	local tool = char and char:FindFirstChildOfClass("Tool") or nil
+	local damage, name = swordDamage(tool)
 	local boost = tonumber(LocalPlayer:GetAttribute("SlashSwingBoostMultiplier")) or 1
 	if boost <= 0 then
 		boost = 1
@@ -2651,6 +2841,119 @@ local function weaponStats()
 		expected = expected,
 		cooldown = cooldown,
 	}
+end
+
+-- use the game's own inventory Request with Operation="Equip" -- the exact path
+-- the real client uses. the EquipRequest bindable only toggles and gets stuck when
+-- a pet tool is selected. accepts a Tool instance or a raw UID string.
+local function equipGameSlot(source)
+	local uid = type(source) == "string" and source
+		or (source and (source:GetAttribute("SlashItemUID") or source:GetAttribute("UID")))
+	if not uid then
+		return false
+	end
+	local folder = ReplicatedStorage:FindFirstChild("SlashInventory")
+	local remotes = folder and folder:FindFirstChild("Remotes")
+	local request = remotes and remotes:FindFirstChild("Request")
+	local getter = remotes and remotes:FindFirstChild("GetSnapshot")
+	if not (request and getter) then
+		return false
+	end
+	local ok, result = pcall(getter.InvokeServer, getter)
+	local snapshot = ok and result and result.Snapshot or nil
+	local revision = snapshot and tonumber(snapshot.Revision) or 0
+	nextRequestId += 1
+	pcall(request.FireServer, request, {
+		RequestId = nextRequestId,
+		ExpectedRevision = revision,
+		Operation = "Equip",
+		Args = { UID = uid },
+	})
+	task.wait(0.55)
+	local char = LocalPlayer.Character
+	if char then
+		for _, candidate in ipairs(char:GetChildren()) do
+			if candidate:IsA("Tool")
+				and tostring(candidate:GetAttribute("SlashItemUID") or candidate:GetAttribute("UID")) == tostring(uid) then
+				return true
+			end
+		end
+	end
+	return false
+end
+
+-- strongest sword definition id -> damage, used to pick from the server inventory
+local function strongestSwordUid()
+	local folder = ReplicatedStorage:FindFirstChild("SlashInventory")
+	local remotes = folder and folder:FindFirstChild("Remotes")
+	local getter = remotes and remotes:FindFirstChild("GetSnapshot")
+	if not getter then
+		return nil, 0, nil
+	end
+	local ok, result = pcall(getter.InvokeServer, getter)
+	local snapshot = ok and result and result.Snapshot or nil
+	if not snapshot or type(snapshot.Items) ~= "table" then
+		return nil, 0, nil
+	end
+	local cfg = GameConfig.Swords or {}
+	local byId = {}
+	for _, entry in pairs(cfg) do
+		byId[tostring(entry.DefinitionId)] = tonumber(entry.Damage) or 0
+	end
+	local bestUid, bestDamage, bestName
+	for uid, item in pairs(snapshot.Items) do
+		if tostring(item.Kind) == "Sword" then
+			local damage = byId[tostring(item.DefinitionId)] or 0
+			if damage > (bestDamage or 0) then
+				bestUid, bestDamage = tostring(uid), damage
+				bestName = tostring(item.Name or item.DefinitionId)
+			end
+		end
+	end
+	return bestUid, bestDamage or 0, bestName
+end
+
+local function ensureWeapon()
+	local char = LocalPlayer.Character
+	if not char then
+		return false, "no character"
+	end
+	local tool = char:FindFirstChildOfClass("Tool")
+	if tool and swordDamage(tool) > 0 then
+		equipGameSlot(tool)
+		return true, "siap · " .. tostring(tool.Name)
+	end
+	local backpack = LocalPlayer.Backpack
+	local best, bestDamage = nil, 0
+	if backpack then
+		for _, candidate in ipairs(backpack:GetChildren()) do
+			if candidate:IsA("Tool") then
+				local damage = swordDamage(candidate)
+				if damage > bestDamage then
+					best, bestDamage = candidate, damage
+				end
+			end
+		end
+	end
+	if not best then
+		-- the character may be holding a pet tool and the backpack empty;
+		-- the real swords live in the server inventory snapshot
+		local uid, damage, name = strongestSwordUid()
+		if uid and damage > 0 then
+			if equipGameSlot(uid) then
+				return true, "equip · " .. tostring(name or uid)
+			end
+			return false, "equip gagal · " .. tostring(name or uid)
+		end
+		return false, "no weapon"
+	end
+	equipGameSlot(best)
+	char = LocalPlayer.Character
+	tool = char and char:FindFirstChildOfClass("Tool")
+	if not tool then
+		return false, "equip gagal"
+	end
+	return true, "equip · " .. tostring(best.Name)
 end
 
 local function swordSuggestion(hp, swing)
@@ -2708,41 +3011,48 @@ local function swingTheEgg(egg, token)
 	end
 	local clicks = math.ceil(hp / math.max(0.01, swing.expected))
 	local seconds = clicks * swing.cooldown
-	S.breakLast = string.format("%s · %s HP · %s/klik · %s klik · %ss",
+	S.breakLast = string.format("%s · %s HP · %s/klik · %s klik · %ss · auto slash",
 		tostring(egg:GetAttribute("EggDisplayName") or egg.Name),
 		fmt(hp), fmt(swing.expected), fmt(clicks), fmt(seconds))
 
+	-- the game's own Auto operation slashes on the server: no click, no focus,
+	-- and no input delay between acquiring the egg and the first hit
+	local sent, sendReason = sendGameRequest("Auto", { Enabled = true })
+	if not sent then
+		return false, "request gagal · " .. tostring(sendReason)
+	end
+
 	local before = hp
-	local misses = 0
-	local i = 0
+	local stagnant = 0
+	local ticks = 0
 	while alive() and S.breakToken == token and egg.Parent and eggHealth(egg) > 0 do
-		i += 1
-		if S.antiBan and i % 11 == 0 then
-			task.wait(0.3 + math.random(0, 40) / 100)
-		end
-		local ok = pcall(function()
-			mouse1press()
-			task.wait(0.06)
-			mouse1release()
-		end)
-		if not ok then
-			return false, "input mouse gagal"
-		end
-		task.wait(swing.cooldown + (S.antiBan and math.random(-6, 12) / 100 or 0))
-		if i % 3 == 0 then
-			local now = eggHealth(egg)
-			if now >= before then
-				misses += 1
-				if misses >= 2 then
-					return false, "focus game dulu · klik nggak ngefek"
-				end
-			else
-				misses = 0
+		ticks += 1
+		local hrp = root()
+		local part = egg:FindFirstChild("EggQueryBounds") or egg:FindFirstChildWhichIsA("BasePart")
+		if hrp and part then
+			local range = tonumber(GameConfig.EggRange) or 8
+			if (part.Position - hrp.Position).Magnitude > range - 1 then
+				teleportToEgg(egg)
 			end
+		end
+		task.wait(0.22)
+		if S.antiBan and ticks % 17 == 0 then
+			task.wait(0.15)
+		end
+		local now = eggHealth(egg)
+		if now < before then
 			before = now
+			stagnant = 0
+		else
+			stagnant += 1
+			if stagnant >= 12 then
+				pcall(sendGameRequest, "Auto", { Enabled = false })
+				return false, "auto slash tidak ngefek · cek weapon/jarak"
+			end
 		end
 	end
-	return eggHealth(egg) <= 0 or not egg.Parent, "pecah"
+	pcall(sendGameRequest, "Auto", { Enabled = false })
+	return eggHealth(egg) <= 0 or not egg.Parent, "pecah · auto slash"
 end
 
 local function breakCycle(silent)
@@ -2763,6 +3073,13 @@ local function breakCycle(silent)
 		return false, S.breakLast
 	end
 	S.breakTarget = egg
+	local armed, weaponDetail = ensureWeapon()
+	if not armed then
+		S.breakFails += 1
+		S.breakLast = weaponDetail
+		S.breakPhase = "idle"
+		return false, S.breakLast
+	end
 	S.breakPhase = "teleport ke telur"
 	if not teleportToEgg(egg) then
 		S.breakFails += 1
@@ -2770,7 +3087,7 @@ local function breakCycle(silent)
 		S.breakPhase = "idle"
 		return false, S.breakLast
 	end
-	S.breakPhase = "auto slash"
+	S.breakPhase = "auto slash · " .. tostring(weaponDetail)
 	local ok, reason = swingTheEgg(egg, token)
 	S.breakPhase = "idle"
 	if ok then
@@ -2811,6 +3128,7 @@ function setAutoBreak(state)
 		task.spawn(breakLoop)
 	else
 		S.breakPhase = "idle"
+		pcall(sendGameRequest, "Auto", { Enabled = false })
 	end
 	if UI.breakToggle then
 		UI.breakToggle.SetSilent(S.breakOn)
@@ -2823,6 +3141,7 @@ local function breakPanelText()
 	local swing = weaponStats()
 	local lines = {
 		"status    " .. (S.breakOn and ("on · " .. tostring(S.breakPhase)) or "off"),
+		"mode      senjata + auto slash server",
 		"map       " .. tostring((GameConfig.ZoneNames or {})[S.breakMap] or S.breakMap),
 		"weapon    " .. swing.name .. " · " .. fmt(swing.damage) .. "/klik",
 	}
@@ -4080,8 +4399,8 @@ table.insert(
 
 		if now - (S.antiAt or 0) > 0.12 then
 			S.antiAt = now
-			pcall(antiStealTick)
-			pcall(antiHitTick)
+			pcall(S.AntiStealTick)
+			pcall(S.AntiHitTick)
 		end
 
 		if S.invisible and now - (S.invisAt or 0) > 3 then
@@ -4492,8 +4811,8 @@ HUB.debug = {
 	end,
 	antiTick = function()
 		local ok, err = pcall(function()
-			antiStealTick()
-			antiHitTick()
+			S.AntiStealTick()
+			S.AntiHitTick()
 		end)
 		return ok, err
 	end,
